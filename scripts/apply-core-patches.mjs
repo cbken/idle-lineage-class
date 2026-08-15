@@ -356,7 +356,53 @@ function patchRelicAffixHook() {
   console.log(`[patch] gainItem 遺物詞綴鉤子（${FILE}）`);
 }
 
-const PATCHES = [patchMaybeSpawnMobs, patchTradEnHook, patch16Slots, patchPetAnimTicker, patchBossHuntEscape, patchUseItemKeepModal, patchSellNowNoForce, patchInsigniaOrder, patchGiltasWandRecompute, patchEyeSlotInEquipList, patchRelicAffixHook];
+// ── 補丁 12：武器內建魔法補上幻覺套裝鉤子（js/03＋js/04＋js/06，共 4 處）─────────
+//   幻覺套裝的說明（js/01 `SHERINE_SET_TEXT`，資訊欄顯示給玩家看的那份）白紙黑字寫著
+//   「魔爆及**武器內建**／免費觸發魔法…」，上游也確實把 spellProc／procSkill／立方／魔爆／
+//   紅惡靈逆襲全接上了 `illusionMagicDmg()`。只有兩種武器內建魔法沒接上（玩家與傭兵各一處）：
+//     ・`qiguProc` — 共鳴奇古獸「幻影衝擊」／寒冰奇古獸「心靈破壞」
+//     ・`procDualSkill` — 解除封印的巴風特魔杖「熾焰地裂術」
+//   兩者都走 magicBaseDamage × weaponMagicDamageCoef × 魔抗，正是說明講的那一類。判斷是「漏接」
+//   而非「刻意排除」的依據：上游刻意不給的三種（一般傷害法術／共鳴／反射）都是**有呼叫、但傳
+//   canTrigger=false** 並附註解說明理由；這兩處是連呼叫都沒有。
+//   外掛包不住——傷害在函式內部算完就直接扣血，中間值攔不到（wrapper 只能事後比 HP 差，遇到
+//   這一擊擊殺就整個錯）。故走錨點補丁，但行為仍問外掛 `__afkIlluWpnFix()`（afk-wpnfix 提供，
+//   受它的 wpnfix 開關管）；未載外掛／關掉＝與原版位元組等價。
+//   ⚠ 插在最後一個乘數之後、扣血與 logCombat 之前 → 戰鬥訊息印的數字跟實際扣的血一致。
+function patchIllusionSetWpnProc() {
+  const ON = "(typeof window.__afkIlluWpnFix === 'function' && window.__afkIlluWpnFix())";
+  // [檔, 錨點(插在它前面), 要插入的敘述, 說明]
+  const SITES = [
+    ['js/03-combat-core.js',
+      "target.curHp -= dmg; if (typeof terrorVisageOnDamage === 'function') terrorVisageOnDamage(target, dmg, 'magic');",
+      `dmg = ${ON} ? illusionMagicDmg(dmg, true) : dmg;   /* 🔌 加掛版補丁:奇古獸內建魔法(幻影衝擊/心靈破壞)補上幻覺套裝 2/5 件 */ `,
+      '奇古獸特效·玩家'],
+    ['js/06-status-allies.js',
+      "t.curHp -= pd; if (typeof terrorVisageOnDamage === 'function') terrorVisageOnDamage(t, pd, 'magic');",
+      `pd = ${ON} ? _allyIllusionMagicDmg(ally, pd) : pd;   /* 🔌 加掛版補丁:同上(傭兵) */ `,
+      '奇古獸特效·傭兵'],
+    ['js/04-combat-attack.js',
+      "_dt.curHp -= _tot; _dt.justHit = 'fire'; mobWake(_dt);",
+      `_tot = ${ON} ? illusionMagicDmg(_tot, true) : _tot;   /* 🔌 加掛版補丁:解除封印的巴風特魔杖(熾焰地裂術)補上幻覺套裝 2/5 件 */ `,
+      '熾焰地裂術·玩家'],
+    ['js/06-status-allies.js',
+      // 傭兵這側扣血在 _allyDamageMob，錨在它前面的特效行 → 插入點仍落在 logCombat 之前
+      "if (typeof playSpellFx === 'function') { try { playSpellFx(_pd.skn || '熾焰地裂術', _dt, ally); } catch (e) {} }",
+      `_tot = ${ON} ? _allyIllusionMagicDmg(ally, _tot) : _tot;   /* 🔌 加掛版補丁:同上(傭兵) */ `,
+      '熾焰地裂術·傭兵'],
+  ];
+  for (const [FILE, anchor, stmt, label] of SITES) {
+    let s = readFileSync(FILE, 'utf8');
+    if (s.includes(stmt.trim())) { already++; continue; }   // 冪等（每處的敘述各自不同，可逐處判斷）
+    if (s.indexOf(anchor) < 0) throw new Error(`[${FILE}] 找不到「${label}」的錨點「${anchor.slice(0, 46)}…」——上游可能改寫了該段，請人工確認幻覺套裝是否已由上游自己接上。`);
+    s = s.replace(anchor, stmt + anchor);
+    if (!CHECK) writeFileSync(FILE, s);
+    changed++;
+    console.log(`[patch] 武器內建魔法吃幻覺套裝 — ${label}（${FILE}）`);
+  }
+}
+
+const PATCHES = [patchMaybeSpawnMobs, patchTradEnHook, patch16Slots, patchPetAnimTicker, patchBossHuntEscape, patchUseItemKeepModal, patchSellNowNoForce, patchInsigniaOrder, patchGiltasWandRecompute, patchEyeSlotInEquipList, patchRelicAffixHook, patchIllusionSetWpnProc];
 
 try {
   for (const p of PATCHES) p();

@@ -16,6 +16,16 @@
  * 一律「只在上游是空的時候才補」，作者哪天自己填了就原樣放行，不會蓋掉他的值、
  * 也不必回頭刪這支（自動讓路）。
  *
+ * 另一類（2026-08-15 加）：**資料有、但程式碼那條路沒接上**——
+ *   共鳴奇古獸「幻影衝擊」、寒冰奇古獸「心靈破壞」、解除封印的巴風特魔杖「熾焰地裂術」
+ *   這三把的內建魔法傷害，沒有經過幻覺套裝的鉤子 illusionMagicDmg()，
+ *   於是 2 件的回 MP、5 件的傷害加倍都吃不到。而幻覺套裝的說明就寫著「魔爆及**武器內建**／
+ *   免費觸發魔法」，同一批的 spellProc / procSkill / 立方 / 魔爆 / 紅惡靈逆襲也全都接上了；
+ *   上游刻意排除的三種（一般傷害法術／共鳴／反射）則是「有呼叫但傳 false」並附註解 → 這三把是漏接。
+ *   兩把奇古獸還是幻術士專屬武器，跟幻覺套裝本來就是同一套配裝，最該吃到的反而漏掉。
+ *   這一條外掛包不住（傷害在核心函式內部算完就直接扣血），走核心補丁 12 開一個鉤子回來問這支，
+ *   本檔只回答「要不要修」＝同一個 wpnfix 開關。玩家關掉＝原版行為，不必重載頁面。
+ *
  * 掛接：在 index.html 的 </body> 前 <script src="afk-wpnfix.js">。
  * ========================================================================== */
 (function () {
@@ -35,26 +45,30 @@
   // ⚠ 金箍棒不必補貫穿：js/10 有條「所有鈍器/鋼爪都給 ignHardSkin」的批次規則是照分類表跑的，
   //   它沒分類本該漏掉，但作者在物品資料上直接寫了 ignHardSkin: true → 已經有了，別再補一次。
 
-  if (typeof window.getWeaponTags !== 'function') {
-    console.warn('[AFK-wpnfix] 找不到 getWeaponTags，武器設定補丁停用。');
-    return;
-  }
-
   if (window.AFK_TOGGLES) {
     AFK_TOGGLES.register({
       id: 'wpnfix', name: '補武器漏掉的特效', group: '遊戲玩法', def: true,
-      desc: '幾把武器的說明有寫、原版卻沒生效的特效（切割、弱點曝光、鈍擊、出血精通…）補回來'
+      desc: '幾把武器的說明有寫、原版卻沒生效的特效（切割、弱點曝光、鈍擊、出血精通、內建魔法沒吃到幻覺套裝…）補回來'
     });
   }
   function on() { try { return !window.AFK_TOGGLES || AFK_TOGGLES.enabled('wpnfix'); } catch (e) { return true; } }
 
-  var _orig = window.getWeaponTags;
-  window.getWeaponTags = function (id) {
-    var tags = _orig.apply(this, arguments);
-    if (tags && tags.length) return tags;   // 上游有登記（含日後補上）→ 一律以上游為準
-    var fix = on() ? MISSING_TAGS[id] : null;
-    return fix || tags;                     // 回同一個陣列實例，與上游一致（呼叫端只讀不改）
-  };
+  // 核心補丁 12 在四個扣血點問這支：回 true 才讓那筆傷害走幻覺套裝的鉤子。
+  // 每次觸發才問一次（奇古獸 1%+強化、巴風特杖 25%），成本可忽略；不快取才能即時反映開關。
+  window.__afkIlluWpnFix = on;
+
+  // ⚠ getWeaponTags 只有下面的分類補丁需要，缺了不能讓整支停掉——幻覺那條（上面的鉤子）跟它無關。
+  if (typeof window.getWeaponTags === 'function') {
+    var _orig = window.getWeaponTags;
+    window.getWeaponTags = function (id) {
+      var tags = _orig.apply(this, arguments);
+      if (tags && tags.length) return tags;   // 上游有登記（含日後補上）→ 一律以上游為準
+      var fix = on() ? MISSING_TAGS[id] : null;
+      return fix || tags;                     // 回同一個陣列實例，與上游一致（呼叫端只讀不改）
+    };
+  } else {
+    console.warn('[AFK-wpnfix] 找不到 getWeaponTags，武器分類補丁停用（其餘照常）。');
+  }
 
   // 欄位型的補丁沒有「每次呼叫」的掛點，只能在載入時寫進 DB.items；
   // 玩家關掉這支要重載頁面才會退回原版（開關面板本來就要重載，與其他外掛一致）。
@@ -74,5 +88,5 @@
     }
   } catch (e) {}
 
-  console.log('[AFK-wpnfix] hooks OK — 補了 ' + Object.keys(MISSING_TAGS).length + ' 件武器的分類、' + patched + ' 個漏填欄位。');
+  console.log('[AFK-wpnfix] hooks OK — 補了 ' + Object.keys(MISSING_TAGS).length + ' 件武器的分類、' + patched + ' 個漏填欄位，幻覺套裝鉤子已就位。');
 })();
