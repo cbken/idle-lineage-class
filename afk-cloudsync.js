@@ -168,9 +168,11 @@
   }
 
   // ── 排程 ───────────────────────────────────────────────────
+  var _booted = false;
   function boot() {
-    if (!getKey()) return;   // 沒設定就完全閒置
-    pull('load');
+    if (!getKey() || _booted) return;   // 沒設定就完全閒置；設定後只掛一次排程
+    _booted = true;
+    if (!_busy) pull('load');   // force-link 正在推的話不搶（推完自然接手）
     setInterval(function () {
       if (document.visibilityState === 'visible' && Date.now() - _lastPushAt >= PUSH_EVERY_MS) push('interval');
     }, 30 * 1000);
@@ -217,6 +219,7 @@
         + 'autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="貼上既有金鑰">'
         + '<button id="m-cs-use" class="cs-b cs-danger cs-mini">連結</button></div>'
         + '<div class="cs-desc">「連結」會抓雲端進度<b>覆蓋這台</b>（雲端較新時）。這台若有想留的進度，先去「完整資料備份與還原」匯出一份。</div>'
+        + '<button id="m-cs-force" class="cs-b cs-mini cs-ghost">🔄 這台的進度才是最新？連結並用這台蓋掉雲端</button>'
         + '</div>';
     }
     html += '<div id="m-cs-note" class="cs-note"></div>';
@@ -258,6 +261,20 @@
       setSeen(0);   // seen 歸零 → 雲端有東西就一定「比較新」→ 套用
       refreshBody(); setStatus('已連結，抓取雲端進度中…');
       pull('manual'); boot();
+    });
+    // 反向連結：這台的進度才是對的（例：剛把舊網站進度搬進這台、但雲端已有一份試玩檔）
+    // → 設金鑰後不拉、直接把這台整包推上去蓋掉雲端。seen 設為現在，讓樂觀鎖放行。
+    if ((b = document.getElementById('m-cs-force'))) b.addEventListener('click', function () {
+      var el = document.getElementById('m-cs-in');
+      var k = String(el && el.value || '').trim();
+      if (!KEY_RE.test(k)) { setStatus('❌ 請先在上面欄位貼上金鑰（24 碼以上英數/-/_）。', true); return; }
+      try { localStorage.setItem(K_KEY, k); } catch (e) { setStatus('❌ 無法寫入金鑰。', true); return; }
+      refreshBody(); setStatus('已連結，正在用這台的進度覆蓋雲端…');
+      // 先問雲端目前的 ts，seen 設成不小於它 → 不管兩台時鐘差多少，這台推的 ts 一定更新、樂觀鎖放行
+      fetch(apiUrl(k), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { setSeen(Math.max(Date.now(), (j && j.ts || 0))); })
+        .catch(function () { setSeen(Date.now()); })
+        .then(function () { push('forcelink'); boot(); });
     });
     if ((b = document.getElementById('m-cs-off'))) b.addEventListener('click', function () {
       try { localStorage.removeItem(K_KEY); localStorage.removeItem(K_SEEN); } catch (e) {}
@@ -322,7 +339,9 @@
       '.cs-slotlbl{color:#94a3b8;font-size:12.5px;}',
       '.cs-slot{border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:#1e293b;border:1px solid #334155;color:#94a3b8;}',
       '.cs-slot:hover{background:#273449;color:#e2e8f0;}',
-      '.cs-slot.on{background:#0e7490;border-color:#0891b2;color:#cffafe;}'
+      '.cs-slot.on{background:#0e7490;border-color:#0891b2;color:#cffafe;}',
+      '.cs-ghost{background:transparent;border:1px dashed #475569;color:#94a3b8;font-weight:400;}',
+      '.cs-ghost:hover{border-color:#0891b2;color:#7dd3fc;}'
     ].join('\n');
     (document.head || document.documentElement).appendChild(s);
   }
