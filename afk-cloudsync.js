@@ -123,7 +123,7 @@
   }
 
   // ── 推 / 拉 ────────────────────────────────────────────────
-  var _busy = false, _lastPushAt = 0, _pendingPush = false;
+  var _busy = false, _lastPushAt = 0, _pendingPush = false, _onPushOk = null;
 
   // 收尾：解除 busy；若期間有被擋掉的推（最常見：關頁前 hidden 推撞上進行中的拉）補推一次
   function release() {
@@ -135,6 +135,8 @@
     if (!on() || _applying) return;
     if (_busy) { _pendingPush = true; return; }   // 別默默丟掉：等在途請求結束後補推
     var key = getKey(); if (!key) return;
+    // 🛡️ 空裝置不准上傳：沒有實際遊戲進度的包推上去，會在別台跳出誤導的「雲端已有存檔」
+    if (!localHasProgress()) return;
     _busy = true;
     var ts = Math.max(Date.now(), getSeen() + 1);   // 裝置時鐘落後也保持單調遞增
     var body;
@@ -149,7 +151,10 @@
         pull('conflict');
         return;
       }
-      if (r.ok) { setSeen(ts); _lastPushAt = Date.now(); setStatus('☁️ 已上傳 ' + fmtT(_lastPushAt)); }
+      if (r.ok) {
+        setSeen(ts); _lastPushAt = Date.now(); setStatus('☁️ 已上傳 ' + fmtT(_lastPushAt));
+        if (_onPushOk) { var f = _onPushOk; _onPushOk = null; try { f(); } catch (e) {} }
+      }
       release();
     }).catch(function () { _busy = false; _pendingPush = false; /* 離線就算了，下一輪再推 */ });
   }
@@ -167,6 +172,12 @@
         release(); return;
       }
       if (!validatePack(j.pack)) { setStatus('❌ 雲端資料格式不對，未套用。', true); release(); return; }
+      // 🛡️ 這台有真進度、雲端那包卻是空的 → 絕不套用（空包蓋真檔=災難）
+      if (localHasProgress() && !packHasProgress(j.pack)) {
+        setSeen(j.ts);   // 沒這行：baseTs < 雲端 ts → 之後每次推都 409 → 又拉 → 無限空轉
+        setStatus('⚠️ 雲端那份是空存檔、這台有實際進度 → 未套用（下次上傳會把雲端蓋成這台的版本）。');
+        release(); return;
+      }
       _busy = false;   // 進套用流程：_applying 會接手擋推，busy 解除但不補推
       // 🚨 套用會蓋掉本機進度 → 只在「雲端確實比較新」時做，做完立刻 reload
       //    （fullsave 的教訓：不 reload 的話，記憶體裡的舊 player 5 秒後就把還原的內容蓋回去）
@@ -189,8 +200,23 @@
     try {
       for (var k in localStorage) {
         if (!Object.prototype.hasOwnProperty.call(localStorage, k)) continue;
-        if (k.indexOf('afk_cs_') === 0) continue;
+        if (k.indexOf('afk_cs_') === 0 || k === 'ilc_gate_ok') continue;
         var v = localStorage.getItem(k);
+        if (v) n += v.length;
+      }
+    } catch (e) {}
+    return n > 4000;
+  }
+  // 雲端那包是不是「真的存檔」：空裝置誤傳的包只有 afk_cs_*/gate/toggle 幾個小 key。
+  // （2026-08-18 實戰教訓：空包被當成「雲端已有存檔」跳確認框，按確定會把剛還原的舊資料洗掉）
+  function packHasProgress(pack) {
+    var n = 0;
+    try {
+      var ks = Object.keys(pack.keys);
+      for (var i = 0; i < ks.length; i++) {
+        var k = ks[i];
+        if (k.indexOf('afk_cs_') === 0 || k === 'ilc_gate_ok') continue;
+        var v = pack.keys[k];
         if (v) n += v.length;
       }
     } catch (e) {}
@@ -202,15 +228,22 @@
     fetch(apiUrl(FIXED_KEY), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
-        if (j && j.pack && j.ts) {
+        if (j && j.pack && j.ts && validatePack(j.pack) && packHasProgress(j.pack)) {
           var useCloud = window.confirm(
             '☁️ 雲端已有「玩家' + getSlot() + '」的存檔，這台也有本機進度。\n\n' +
             '按「確定」＝載入雲端進度（這台目前的進度會被蓋掉）\n' +
             '按「取消」＝以這台為準，上傳蓋掉雲端');
           if (useCloud) { setSeen(0); }
-          else { setSeen(Math.max(Date.now(), j.ts)); push('forcelink'); }
+          else {
+            setSeen(Math.max(Date.now(), j.ts));
+            _onPushOk = function () { window.alert('✅ 完成！已用這台的進度覆蓋雲端，之後各裝置自動同步。'); };
+            push('forcelink');
+          }
         } else {
-          setSeen(0); push('firstrun');
+          // 雲端沒有「真的存檔」（空的或空裝置誤傳的垃圾包）→ 不問，直接以這台為準蓋上去
+          setSeen(Math.max(Date.now(), (j && j.ts) || 0));
+          _onPushOk = function () { window.alert('✅ 完成！這台的進度已上傳雲端，之後各裝置自動同步。'); };
+          push('firstrun');
         }
         boot();
       })
