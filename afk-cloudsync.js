@@ -223,6 +223,14 @@
     return n > 4000;
   }
   function autoLink() {
+    // 第一次連結先問這台是誰的：一家人各占一槽（1~4），同一個人的電腦+手機填同一號。
+    // 沒這步的話新裝置一律接玩家1 → 第二位家人會拉到別人的存檔。
+    var s = window.prompt(
+      '☁️ 這台裝置是「玩家幾」？\n\n一家人各自一個號碼（1~4）。\n同一個人的電腦和手機填同一號。\n（第一次用的人填一個沒人用過的號碼）', getSlot());
+    if (s != null) {
+      s = String(s).trim();
+      if (/^[1-4]$/.test(s)) { try { localStorage.setItem(K_SLOT, s); } catch (e) {} }
+    }
     try { localStorage.setItem(K_KEY, FIXED_KEY); } catch (e) { return; }
     if (!localHasProgress()) { setSeen(0); boot(); return; }
     fetch(apiUrl(FIXED_KEY), { cache: 'no-store' })
