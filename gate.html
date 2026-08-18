@@ -18,7 +18,7 @@
             color: #e8e6e0;
         }
         .card {
-            width: min(90vw, 360px);
+            width: min(90vw, 380px);
             background: #1e2230;
             border: 1px solid #3a4055;
             border-radius: 14px;
@@ -56,22 +56,65 @@
         }
         button:active { transform: scale(.98); }
         .err { color: #e07a7a; font-size: 13px; margin-top: 12px; min-height: 18px; }
+        .hidden { display: none; }
+        .players { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .players button {
+            margin-top: 0;
+            padding: 18px 10px;
+            font-size: 16px;
+            background: #2a3046;
+            border: 1px solid #3a4055;
+        }
+        .players button.cur { background: #4a5aa8; border-color: #6b7cc4; }
+        .players button .sub { display: block; font-size: 11px; font-weight: 400; color: #b8bdd0; margin-top: 4px; }
+        .hint { font-size: 12px; color: #9aa0b5; margin-top: 18px; line-height: 1.7; }
     </style>
 </head>
 <body>
     <div class="card">
-        <div class="lock">🔒</div>
-        <h1>私人遊戲空間</h1>
-        <p>這是家庭私人使用的頁面<br>請輸入通行碼</p>
-        <input id="pw" type="password" placeholder="通行碼" autocomplete="off" autofocus>
-        <button id="go">進入</button>
-        <div class="err" id="err"></div>
+        <!-- 第一步：通行碼 -->
+        <div id="step-pw">
+            <div class="lock">🔒</div>
+            <h1>私人遊戲空間</h1>
+            <p>這是家庭私人使用的頁面<br>請輸入通行碼</p>
+            <input id="pw" type="password" placeholder="通行碼" autocomplete="off" autofocus>
+            <button id="go">下一步</button>
+            <div class="err" id="err"></div>
+        </div>
+        <!-- 第二步：選玩家 -->
+        <div id="step-slot" class="hidden">
+            <div class="lock">👤</div>
+            <h1>你是玩家幾？</h1>
+            <p>一人一個號碼、進度各自獨立<br>同一個人的電腦和手機選同一號</p>
+            <div class="players">
+                <button data-s="1">👑 玩家1</button>
+                <button data-s="2">🎮 玩家2</button>
+                <button data-s="3">🎮 玩家3</button>
+                <button data-s="4">🎮 玩家4</button>
+            </div>
+            <div class="hint">選好直接進遊戲。之後這台裝置都直接進，<br>要換人玩再回這頁（遊戲裡 ☁️ 雲端存檔同步也能切）。</div>
+        </div>
     </div>
     <script>
     (function(){
         var HASH = '94e441327a1592db2503342e37cb173870aa0c5cc2f3976e02bcca94f9210ec6';
-        var KEY = 'ilc_gate_ok';
-        try { if (localStorage.getItem(KEY) === HASH) { location.replace('./'); return; } } catch(e){}
+        var K_GATE = 'ilc_gate_ok', K_SLOTOK = 'ilc_slot_ok', K_SLOT = 'afk_cs_slot', K_SEEN = 'afk_cs_seen';
+        function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+        function authed(){ return ls(K_GATE) === HASH; }
+
+        function showSlot(){
+            document.getElementById('step-pw').className = 'hidden';
+            var el = document.getElementById('step-slot');
+            el.className = '';
+            var cur = ls(K_SLOT);
+            Array.prototype.forEach.call(el.querySelectorAll('.players button'), function(b){
+                if (b.getAttribute('data-s') === cur) b.className = 'cur';
+            });
+        }
+
+        // 已通過通行碼 → 直接跳到選玩家那步（讓人隨時可以回來換人）
+        if (authed()) showSlot();
+
         function sha256hex(str){
             return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function(buf){
                 return Array.prototype.map.call(new Uint8Array(buf), function(b){
@@ -84,8 +127,8 @@
             if (!v) return;
             sha256hex(v).then(function(h){
                 if (h === HASH) {
-                    try { localStorage.setItem(KEY, HASH); } catch(e){}
-                    location.replace('./');
+                    try { localStorage.setItem(K_GATE, HASH); } catch(e){}
+                    showSlot();
                 } else {
                     document.getElementById('err').textContent = '通行碼不對，再試一次';
                     document.getElementById('pw').value = '';
@@ -95,6 +138,18 @@
         document.getElementById('go').addEventListener('click', submit);
         document.getElementById('pw').addEventListener('keydown', function(e){
             if (e.key === 'Enter') submit();
+        });
+
+        Array.prototype.forEach.call(document.querySelectorAll('.players button'), function(b){
+            b.addEventListener('click', function(){
+                var s = b.getAttribute('data-s');
+                try {
+                    if (ls(K_SLOT) !== s) localStorage.removeItem(K_SEEN);   // 換槽 = 改認另一份雲端存檔
+                    localStorage.setItem(K_SLOT, s);
+                    localStorage.setItem(K_SLOTOK, '1');
+                } catch(e){}
+                location.replace('./');
+            });
         });
     })();
     </script>

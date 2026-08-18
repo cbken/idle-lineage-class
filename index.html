@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- 🔒 私人通行碼閘門：沒通過 gate.html 驗證前直接跳轉、不載入遊戲（家庭私用） -->
     <meta name="robots" content="noindex, nofollow">
-    <script>(function(){var H='94e441327a1592db2503342e37cb173870aa0c5cc2f3976e02bcca94f9210ec6';try{if(localStorage.getItem('ilc_gate_ok')!==H){location.replace('gate.html');}}catch(e){location.replace('gate.html');}})();</script>
+    <script>(function(){var H='94e441327a1592db2503342e37cb173870aa0c5cc2f3976e02bcca94f9210ec6';try{if(localStorage.getItem('ilc_gate_ok')!==H||localStorage.getItem('ilc_slot_ok')!=='1'){location.replace('gate.html');}}catch(e){location.replace('gate.html');}})();</script>
     <!-- 🚀 v3.0.74 移植參考版優化：禁止瀏覽器快取 HTML→改檔後玩家重整即拿到新版 js/css（免手動硬重載/清快取） -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -631,7 +631,7 @@
     <!-- 整包備份／還原（本機檔案）：入口掛在 afk-storage 的設定選單裡，必須排在它之後 -->
     <script src="afk-fullsave.js?v=79af4b3787"></script>
     <!-- 雲端存檔同步（cbken 加掛）：入口掛在 afk-storage 的設定選單裡，必須排在它之後 -->
-    <script src="afk-cloudsync.js?v=5"></script>
+    <script src="afk-cloudsync.js?v=6"></script>
     <!-- 存檔空間警告：localStorage 用量 >80% 時首頁紅色警告(唯讀;與 afk-storage 同一套估算) -->
     <script src="afk-quotawarn.js?v=18a1cae9ee"></script>
     <!-- 首頁公告卡（通用框架：檔頭 NOTICE 設成 null 就不顯示，要發公告時填一組設定即可） -->

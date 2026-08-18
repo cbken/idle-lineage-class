@@ -111,6 +111,7 @@
   function applyCloud(cloudTs, pack, myKey) {
     _applying = true;
     var mySlot = getSlot();   // clear 前先記下，槽位屬於「這台裝置」不跟著存檔走
+    var myGate = null; try { myGate = localStorage.getItem('ilc_gate_ok'); } catch (e) {}
     var names = Object.keys(pack.keys);
     try { localStorage.clear(); } catch (e) { _applying = false; return false; }
     for (var i = 0; i < names.length; i++) {
@@ -118,6 +119,8 @@
     }
     // 金鑰/槽位/seen 必須是「這台裝置的視角」：金鑰槽位照舊、seen = 剛套用的雲端 ts
     try { localStorage.setItem(K_KEY, myKey); localStorage.setItem(K_SLOT, mySlot); } catch (e) {}
+    // 通行碼/選人狀態也屬於「這台裝置」：沒這兩行，pull 完 reload 會被踢回 gate 重輸一次
+    try { if (myGate) localStorage.setItem('ilc_gate_ok', myGate); localStorage.setItem('ilc_slot_ok', '1'); } catch (e) {}
     setSeen(cloudTs);
     return true;
   }
@@ -223,14 +226,7 @@
     return n > 4000;
   }
   function autoLink() {
-    // 第一次連結先問這台是誰的：一家人各占一槽（1~4），同一個人的電腦+手機填同一號。
-    // 沒這步的話新裝置一律接玩家1 → 第二位家人會拉到別人的存檔。
-    var s = window.prompt(
-      '☁️ 這台裝置是「玩家幾」？\n\n一家人各自一個號碼（1~4）。\n同一個人的電腦和手機填同一號。\n（第一次用的人填一個沒人用過的號碼）', getSlot());
-    if (s != null) {
-      s = String(s).trim();
-      if (/^[1-4]$/.test(s)) { try { localStorage.setItem(K_SLOT, s); } catch (e) {} }
-    }
+    // 玩家槽（1~4）在 gate.html 進門時就選好了（ilc_slot_ok），這裡直接沿用 getSlot()。
     try { localStorage.setItem(K_KEY, FIXED_KEY); } catch (e) { return; }
     if (!localHasProgress()) { setSeen(0); boot(); return; }
     fetch(apiUrl(FIXED_KEY), { cache: 'no-store' })
