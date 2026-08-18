@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>私人遊戲空間</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #14161d;
+            font-family: "Noto Sans TC", -apple-system, sans-serif;
+            color: #e8e6e0;
+        }
+        .card {
+            width: min(90vw, 360px);
+            background: #1e2230;
+            border: 1px solid #3a4055;
+            border-radius: 14px;
+            padding: 36px 28px;
+            text-align: center;
+            box-shadow: 0 12px 40px rgba(0,0,0,.5);
+        }
+        .lock { font-size: 42px; margin-bottom: 14px; }
+        h1 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+        p { font-size: 13px; color: #9aa0b5; margin-bottom: 22px; }
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #3a4055;
+            background: #14161d;
+            color: #e8e6e0;
+            text-align: center;
+            letter-spacing: 2px;
+            outline: none;
+        }
+        input:focus { border-color: #6b7cc4; }
+        button {
+            width: 100%;
+            margin-top: 14px;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            border: none;
+            border-radius: 8px;
+            background: #4a5aa8;
+            color: #fff;
+            cursor: pointer;
+        }
+        button:active { transform: scale(.98); }
+        .err { color: #e07a7a; font-size: 13px; margin-top: 12px; min-height: 18px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="lock">🔒</div>
+        <h1>私人遊戲空間</h1>
+        <p>這是家庭私人使用的頁面<br>請輸入通行碼</p>
+        <input id="pw" type="password" placeholder="通行碼" autocomplete="off" autofocus>
+        <button id="go">進入</button>
+        <div class="err" id="err"></div>
+    </div>
+    <script>
+    (function(){
+        var HASH = '5eafec6bec787a30feec8c49f4e0bdd7fb009fb1cee4ffd6079e1e3b9ff959e3';
+        var KEY = 'ilc_gate_ok';
+        try { if (localStorage.getItem(KEY) === HASH) { location.replace('./'); return; } } catch(e){}
+        function sha256hex(str){
+            return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function(buf){
+                return Array.prototype.map.call(new Uint8Array(buf), function(b){
+                    return ('0'+b.toString(16)).slice(-2);
+                }).join('');
+            });
+        }
+        function submit(){
+            var v = document.getElementById('pw').value.trim();
+            if (!v) return;
+            sha256hex(v).then(function(h){
+                if (h === HASH) {
+                    try { localStorage.setItem(KEY, HASH); } catch(e){}
+                    location.replace('./');
+                } else {
+                    document.getElementById('err').textContent = '通行碼不對，再試一次';
+                    document.getElementById('pw').value = '';
+                }
+            });
+        }
+        document.getElementById('go').addEventListener('click', submit);
+        document.getElementById('pw').addEventListener('keydown', function(e){
+            if (e.key === 'Enter') submit();
+        });
+    })();
+    </script>
+</body>
+</html>
