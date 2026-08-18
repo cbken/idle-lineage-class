@@ -41,6 +41,18 @@
   var K_SEEN = 'afk_cs_seen';   // 最後看過/寫過的雲端 ts（毫秒字串）
   var K_SLOT = 'afk_cs_slot';   // 這台裝置的玩家槽 1~4（預設 1）
   var KEY_RE = /^[A-Za-z0-9_-]{24,64}$/;
+
+  // ── 固定家庭金鑰（2026-08-18 Ken 拍板：金鑰寫死、全家共用、開頁自動連結） ──
+  // Worker 端要求 24~64 碼 → 短碼用「重複展開」補到 24+（同一短碼永遠展開成同一長碼）。
+  // 頁面本身已有 gate.html 通行碼擋門，這裡的金鑰只是同步定位用。
+  function normKey(s) {
+    s = String(s || '').trim();
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(s)) return '';
+    var out = s;
+    while (out.length < 24) out += s;
+    return out.slice(0, 64);
+  }
+  var FIXED_KEY = normKey('123ken456');
   var FORMAT = 'idle-lineage-full';   // 與 fullsave 同格式，備援時可互通
   var SCHEMA = 1;
 
@@ -167,6 +179,44 @@
     }).catch(function () { _busy = false; _pendingPush = false; if (reason === 'manual') setStatus('❌ 連不上雲端（沒網路或服務未部署）。', true); });
   }
 
+  // ── 自動連結（固定金鑰） ──────────────────────────────────
+  // 這台還沒設金鑰 → 自動掛上 FIXED_KEY。方向判斷：
+  //   本機沒進度 → 直接拉雲端（有就套、沒有就等推）。
+  //   本機有進度 + 雲端也有 → 跳 confirm 問要用哪邊（防「搬完舊檔被雲端試玩檔蓋掉」）。
+  //   本機有進度 + 雲端沒有 → 直接上傳。
+  function localHasProgress() {
+    var n = 0;
+    try {
+      for (var k in localStorage) {
+        if (!Object.prototype.hasOwnProperty.call(localStorage, k)) continue;
+        if (k.indexOf('afk_cs_') === 0) continue;
+        var v = localStorage.getItem(k);
+        if (v) n += v.length;
+      }
+    } catch (e) {}
+    return n > 4000;
+  }
+  function autoLink() {
+    try { localStorage.setItem(K_KEY, FIXED_KEY); } catch (e) { return; }
+    if (!localHasProgress()) { setSeen(0); boot(); return; }
+    fetch(apiUrl(FIXED_KEY), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (j && j.pack && j.ts) {
+          var useCloud = window.confirm(
+            '☁️ 雲端已有「玩家' + getSlot() + '」的存檔，這台也有本機進度。\n\n' +
+            '按「確定」＝載入雲端進度（這台目前的進度會被蓋掉）\n' +
+            '按「取消」＝以這台為準，上傳蓋掉雲端');
+          if (useCloud) { setSeen(0); }
+          else { setSeen(Math.max(Date.now(), j.ts)); push('forcelink'); }
+        } else {
+          setSeen(0); push('firstrun');
+        }
+        boot();
+      })
+      .catch(function () { setSeen(Date.now()); boot(); /* 離線：先不動，之後照常同步 */ });
+  }
+
   // ── 排程 ───────────────────────────────────────────────────
   var _booted = false;
   function boot() {
@@ -255,8 +305,8 @@
     });
     if ((b = document.getElementById('m-cs-use'))) b.addEventListener('click', function () {
       var el = document.getElementById('m-cs-in');
-      var k = String(el && el.value || '').trim();
-      if (!KEY_RE.test(k)) { setStatus('❌ 金鑰格式不對（24 碼以上英數/-/_）。', true); return; }
+      var k = normKey(String(el && el.value || ''));
+      if (!KEY_RE.test(k)) { setStatus('❌ 金鑰格式不對（6 碼以上英數/-/_）。', true); return; }
       try { localStorage.setItem(K_KEY, k); } catch (e) { setStatus('❌ 無法寫入金鑰。', true); return; }
       setSeen(0);   // seen 歸零 → 雲端有東西就一定「比較新」→ 套用
       refreshBody(); setStatus('已連結，抓取雲端進度中…');
@@ -266,8 +316,8 @@
     // → 設金鑰後不拉、直接把這台整包推上去蓋掉雲端。seen 設為現在，讓樂觀鎖放行。
     if ((b = document.getElementById('m-cs-force'))) b.addEventListener('click', function () {
       var el = document.getElementById('m-cs-in');
-      var k = String(el && el.value || '').trim();
-      if (!KEY_RE.test(k)) { setStatus('❌ 請先在上面欄位貼上金鑰（24 碼以上英數/-/_）。', true); return; }
+      var k = normKey(String(el && el.value || ''));
+      if (!KEY_RE.test(k)) { setStatus('❌ 請先在上面欄位貼上金鑰（6 碼以上英數/-/_）。', true); return; }
       try { localStorage.setItem(K_KEY, k); } catch (e) { setStatus('❌ 無法寫入金鑰。', true); return; }
       refreshBody(); setStatus('已連結，正在用這台的進度覆蓋雲端…');
       // 先問雲端目前的 ts，seen 設成不小於它 → 不管兩台時鐘差多少，這台推的 ts 一定更新、樂觀鎖放行
@@ -349,7 +399,7 @@
   function init() {
     window.AFK_SETTINGS = window.AFK_SETTINGS || { _items: [], add: function (it) { this._items.push(it); } };
     window.AFK_SETTINGS.add({ label: '☁️ 雲端存檔同步', onClick: openModal });
-    boot();
+    if (getKey()) boot(); else autoLink();
     try { console.log('[AFK-cloudsync] hooks OK' + (getKey() ? ' — 已設定金鑰，自動同步中。' : ' — 尚未設定金鑰（⚙ 選單可設定）。')); } catch (e) {}
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
