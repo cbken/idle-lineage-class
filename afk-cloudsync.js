@@ -225,6 +225,43 @@
     } catch (e) {}
     return n > 4000;
   }
+  // 選檔畫面（2026-08-19 Ken 拍板：兩份進度不一樣時，給清楚的兩顆大按鈕自己選，
+  //   資訊寫足 — 更新時間、角色數 — 取代看不懂的原生 confirm）
+  function countChars(keys) {
+    var n = 0;
+    try { for (var k in keys) if (/^lineage_idle_save_/.test(k) && keys[k]) n++; } catch (e) {}
+    return n;
+  }
+  function pickSave(j, onCloud, onLocal) {
+    var cloudChars = 0;
+    try { cloudChars = countChars(j.pack.keys); } catch (e) {}
+    var localKeys = {};
+    try { for (var k in localStorage) localKeys[k] = localStorage.getItem(k); } catch (e) {}
+    var localChars = countChars(localKeys);
+    var t = new Date(j.ts), pad = function (n) { return ('0' + n).slice(-2); };
+    var ts = (t.getMonth() + 1) + '/' + t.getDate() + ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes());
+    var d = document.createElement('div');
+    d.id = 'm-cs-pick';
+    d.innerHTML = '<div class="csp-card"><div class="csp-title">📂 要載入哪一份進度？</div>'
+      + '<button class="csp-b csp-cloud">☁️ 雲端的進度<span class="csp-sub">' + ts + ' 更新 · 角色 ' + cloudChars + ' 隻（各裝置同步的最新版）</span></button>'
+      + '<button class="csp-b csp-local">💻 這台裝置的進度<span class="csp-sub">角色 ' + localChars + ' 隻 · 只存在這台（選這個會把它上傳成雲端版本）</span></button>'
+      + '</div>';
+    var st = document.createElement('style');
+    st.textContent = '#m-cs-pick{position:fixed;inset:0;z-index:2147483000;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center;font-family:system-ui,"Segoe UI",sans-serif;}'
+      + '#m-cs-pick .csp-card{background:#0f172a;border:1px solid #334155;border-radius:14px;padding:22px;max-width:440px;width:92vw;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 40px rgba(0,0,0,.6);}'
+      + '#m-cs-pick .csp-title{color:#7dd3fc;font-weight:700;font-size:17px;text-align:center;margin-bottom:4px;}'
+      + '#m-cs-pick .csp-b{border-radius:10px;padding:16px;font-size:16px;font-weight:700;cursor:pointer;border:1px solid #334155;color:#e2e8f0;text-align:left;line-height:1.5;font-family:inherit;}'
+      + '#m-cs-pick .csp-cloud{background:#0e7490;border-color:#0891b2;}'
+      + '#m-cs-pick .csp-cloud:hover{background:#0891b2;}'
+      + '#m-cs-pick .csp-local{background:#1e293b;}'
+      + '#m-cs-pick .csp-local:hover{background:#273449;}'
+      + '#m-cs-pick .csp-sub{display:block;font-size:12.5px;font-weight:400;color:#cbd5e1;margin-top:5px;}';
+    d.appendChild(st);
+    (document.body || document.documentElement).appendChild(d);
+    d.querySelector('.csp-cloud').addEventListener('click', function () { d.remove(); onCloud(); });
+    d.querySelector('.csp-local').addEventListener('click', function () { d.remove(); onLocal(); });
+  }
+
   function autoLink() {
     // 玩家槽（1~4）在 gate.html 進門時就選好了（ilc_slot_ok），這裡直接沿用 getSlot()。
     try { localStorage.setItem(K_KEY, FIXED_KEY); } catch (e) { return; }
@@ -233,23 +270,20 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
         if (j && j.pack && j.ts && validatePack(j.pack) && packHasProgress(j.pack)) {
-          var useCloud = window.confirm(
-            '☁️ 雲端已有「玩家' + getSlot() + '」的存檔，這台也有本機進度。\n\n' +
-            '按「確定」＝載入雲端進度（這台目前的進度會被蓋掉）\n' +
-            '按「取消」＝以這台為準，上傳蓋掉雲端');
-          if (useCloud) { setSeen(0); }
-          else {
+          pickSave(j, function () {   // ☁️ 用雲端
+            setSeen(0); boot();
+          }, function () {            // 💻 用這台
             setSeen(Math.max(Date.now(), j.ts));
             _onPushOk = function () { window.alert('✅ 完成！已用這台的進度覆蓋雲端，之後各裝置自動同步。'); };
-            push('forcelink');
-          }
+            push('forcelink'); boot();
+          });
         } else {
           // 雲端沒有「真的存檔」（空的或空裝置誤傳的垃圾包）→ 不問，直接以這台為準蓋上去
           setSeen(Math.max(Date.now(), (j && j.ts) || 0));
           _onPushOk = function () { window.alert('✅ 完成！這台的進度已上傳雲端，之後各裝置自動同步。'); };
           push('firstrun');
+          boot();
         }
-        boot();
       })
       .catch(function () { setSeen(Date.now()); boot(); /* 離線：先不動，之後照常同步 */ });
   }
