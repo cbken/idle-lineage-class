@@ -122,9 +122,11 @@
       };
       AFK_TOGGLES.set.__afkNoBanner = true;
     }
-    // 開著但沒同意紀錄(上一場問到一半就關掉、或手動改過 localStorage)→ 補問一次,問到之前不藏
-    if (on() && !acked()) ask(); else apply();
-    console.log('[AFK-nobanner] hooks OK — 橫幅隱藏（預設關，開啟時會先確認）。');
+    // 2026-08-19 Ken(站主)拍板 always-on：本站已改 gate.html 私人閘門、只有家人進得來，
+    //   「這不是原版」的告知義務由站主對家人承擔 → 預設開 + 免逐台確認（原確認流程保留給「關掉再手動打開」的路徑）。
+    if (on() && !acked()) setAck(true);
+    apply();
+    console.log('[AFK-nobanner] hooks OK — 橫幅隱藏（本站預設開啟·站主拍板）。');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

@@ -102,7 +102,7 @@
         { id: 'synccompress', name: '存檔即時壓縮', desc: '避免存檔爆掉害角色或倉庫消失；代價是存檔時多花一點時間', group: '系統與其他', def: false },
         { id: 'powersave', name: '省電模式', desc: '省電選項：降低畫面更新頻率、關動畫、關光暈濾鏡、關特效與音效', group: '系統與其他' },
         { id: 'skin', name: '首頁外掛入口/資訊', desc: '整理首頁的外掛入口，並顯示原作者連結與最後同步原版的時間', group: '系統與其他' },
-        { id: 'nobanner', name: '隱藏非官方版本橫幅', desc: '藏掉頂端那條「非官方轉載版本」橫幅，把畫面空間讓回來', group: '系統與其他', def: false },
+        { id: 'nobanner', name: '隱藏非官方版本橫幅', desc: '藏掉頂端那條「非官方轉載版本」橫幅，把畫面空間讓回來', group: '系統與其他', def: true },   // 2026-08-19 Ken(站主)拍板 always-on：本站已有 gate.html 私人閘門、無公眾訪客
         { id: 'offline', name: '離線快速結算', desc: '關掉遊戲回來自動結算掛機收益', group: '遊戲玩法' },
         { id: 'traditional', name: '傳統模式(偽)', desc: '打到或做出來的裝備自帶隨機強化值（在選角卡右上角逐角色開關）', group: '遊戲玩法' },
         { id: 'dograce', name: '賽狗場', desc: '賭哪隻狗第一，押金幣或龍鑽、中了自動入袋（自動化分頁開啟）', group: '遊戲玩法' },
