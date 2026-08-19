@@ -301,8 +301,9 @@
           setSeen(0); pull('manual');
         });
         d.querySelector('.csp-local').addEventListener('click', function () {
-          d.remove();
           if (!localHasProgress()) { window.alert('這台沒有實際進度可以上傳。'); return; }
+          if (!window.confirm('⚠️ 確定要用「這台」的進度覆蓋雲端嗎？\n\n雲端目前那份會先存進快照（7 天內可救回）。')) return;
+          d.remove();
           setSeen(Math.max(Date.now(), (j && j.ts) || 0));
           _onPushOk = function () { window.alert('✅ 已把這台的進度上傳成雲端版本，之後各裝置同步這份。'); };
           push('forcelink');
@@ -332,6 +333,7 @@
           pickSave(j, function () {   // ☁️ 用雲端
             setSeen(0); boot();
           }, function () {            // 💻 用這台
+            if (!window.confirm('⚠️ 確定要用「這台」的進度覆蓋雲端嗎？\n\n雲端目前那份會先存進快照（7 天內可救回）。')) { autoLink(); return; }
             setSeen(Math.max(Date.now(), j.ts));
             _onPushOk = function () { window.alert('✅ 完成！已用這台的進度覆蓋雲端，之後各裝置自動同步。'); };
             push('forcelink'); boot();
@@ -532,7 +534,9 @@
     // 首頁入口：#main-menu 是遊戲 js 之後才長出來的（且選角來回會重建）→ 輪詢補掛
     injectEntry();
     setInterval(injectEntry, 2000);
-    if (getKey()) boot(); else autoLink();
+    // 金鑰已定案為固定家庭金鑰：任何裝置存著別的（舊隨機金鑰＝按過「產生新金鑰」的孤兒）
+    // → 一律歸隊：走 autoLink 蓋成 FIXED_KEY + 重新對進度（2026-08-19 公司機就是這樣跑丟的）
+    if (getKey() === FIXED_KEY) boot(); else autoLink();
     try { console.log('[AFK-cloudsync] hooks OK' + (getKey() ? ' — 已設定金鑰，自動同步中。' : ' — 尚未設定金鑰（⚙ 選單可設定）。')); } catch (e) {}
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
