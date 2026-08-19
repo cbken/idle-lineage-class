@@ -247,19 +247,78 @@
       + '<button class="csp-b csp-local">💻 這台裝置的進度<span class="csp-sub">角色 ' + localChars + ' 隻 · 只存在這台（選這個會把它上傳成雲端版本）</span></button>'
       + '</div>';
     var st = document.createElement('style');
-    st.textContent = '#m-cs-pick{position:fixed;inset:0;z-index:2147483000;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center;font-family:system-ui,"Segoe UI",sans-serif;}'
-      + '#m-cs-pick .csp-card{background:#0f172a;border:1px solid #334155;border-radius:14px;padding:22px;max-width:440px;width:92vw;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 40px rgba(0,0,0,.6);}'
+    st.textContent = pickStyleText();
+    d.appendChild(st);
+    (document.body || document.documentElement).appendChild(d);
+    d.querySelector('.csp-cloud').addEventListener('click', function () { d.remove(); onCloud(); });
+    d.querySelector('.csp-local').addEventListener('click', function () { d.remove(); onLocal(); });
+  }
+
+  // ── 首頁「☁️ 雲端進度」入口（2026-08-19 Ken 拍板：不靠自動跳，首頁隨時點、自己選要載哪份） ──
+  function pickStyleText() {
+    return '#m-cs-pick{position:fixed;inset:0;z-index:2147483000;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center;font-family:system-ui,"Segoe UI",sans-serif;}'
+      + '#m-cs-pick .csp-card{position:relative;background:#0f172a;border:1px solid #334155;border-radius:14px;padding:22px;max-width:440px;width:92vw;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 40px rgba(0,0,0,.6);}'
       + '#m-cs-pick .csp-title{color:#7dd3fc;font-weight:700;font-size:17px;text-align:center;margin-bottom:4px;}'
       + '#m-cs-pick .csp-b{border-radius:10px;padding:16px;font-size:16px;font-weight:700;cursor:pointer;border:1px solid #334155;color:#e2e8f0;text-align:left;line-height:1.5;font-family:inherit;}'
       + '#m-cs-pick .csp-cloud{background:#0e7490;border-color:#0891b2;}'
       + '#m-cs-pick .csp-cloud:hover{background:#0891b2;}'
       + '#m-cs-pick .csp-local{background:#1e293b;}'
       + '#m-cs-pick .csp-local:hover{background:#273449;}'
-      + '#m-cs-pick .csp-sub{display:block;font-size:12.5px;font-weight:400;color:#cbd5e1;margin-top:5px;}';
-    d.appendChild(st);
-    (document.body || document.documentElement).appendChild(d);
-    d.querySelector('.csp-cloud').addEventListener('click', function () { d.remove(); onCloud(); });
-    d.querySelector('.csp-local').addEventListener('click', function () { d.remove(); onLocal(); });
+      + '#m-cs-pick .csp-sub{display:block;font-size:12.5px;font-weight:400;color:#cbd5e1;margin-top:5px;}'
+      + '#m-cs-pick .csp-x{position:absolute;top:8px;right:12px;background:none;border:0;color:#94a3b8;font-size:20px;cursor:pointer;padding:4px;}'
+      + '#m-cs-pick .csp-note{font-size:12.5px;color:#94a3b8;text-align:center;}';
+  }
+  function fmtTs(ms) { var t = new Date(ms), p = function (n) { return ('0' + n).slice(-2); }; return (t.getMonth() + 1) + '/' + t.getDate() + ' ' + p(t.getHours()) + ':' + p(t.getMinutes()); }
+  function localChars() {
+    var lk = {}; try { for (var k in localStorage) lk[k] = localStorage.getItem(k); } catch (e) {}
+    return countChars(lk);
+  }
+  function openPicker() {
+    var key = getKey() || FIXED_KEY;
+    fetch(apiUrl(key), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var hasCloud = j && j.pack && j.ts && validatePack(j.pack) && packHasProgress(j.pack);
+        var synced = hasCloud && !(j.ts > getSeen());
+        var old = document.getElementById('m-cs-pick'); if (old) old.remove();
+        var d = document.createElement('div');
+        d.id = 'm-cs-pick';
+        d.innerHTML = '<div class="csp-card"><button class="csp-x" title="關閉">✕</button>'
+          + '<div class="csp-title">📂 玩家' + getSlot() + ' 的進度</div>'
+          + (hasCloud
+            ? '<button class="csp-b csp-cloud">☁️ 雲端的進度<span class="csp-sub">' + fmtTs(j.ts) + ' 更新 · 角色 ' + countChars(j.pack.keys) + ' 隻'
+              + (synced ? ' · ✅ 這台就是這份' : '') + '</span></button>'
+            : '<div class="csp-note">☁️ 雲端這個玩家槽還沒有存檔</div>')
+          + '<button class="csp-b csp-local">💻 這台裝置的進度<span class="csp-sub">角色 ' + localChars() + ' 隻（點了會上傳成雲端版本）</span></button>'
+          + '</div>';
+        var st = document.createElement('style'); st.textContent = pickStyleText(); d.appendChild(st);
+        (document.body || document.documentElement).appendChild(d);
+        d.querySelector('.csp-x').addEventListener('click', function () { d.remove(); });
+        var cb = d.querySelector('.csp-cloud');
+        if (cb) cb.addEventListener('click', function () {
+          d.remove();
+          if (synced) { window.alert('這台目前就是雲端的最新進度 ✅ 直接玩就好。'); return; }
+          setSeen(0); pull('manual');
+        });
+        d.querySelector('.csp-local').addEventListener('click', function () {
+          d.remove();
+          if (!localHasProgress()) { window.alert('這台沒有實際進度可以上傳。'); return; }
+          setSeen(Math.max(Date.now(), (j && j.ts) || 0));
+          _onPushOk = function () { window.alert('✅ 已把這台的進度上傳成雲端版本，之後各裝置同步這份。'); };
+          push('forcelink');
+        });
+      })
+      .catch(function () { window.alert('❌ 連不上雲端（沒網路或被擋），稍後再試。'); });
+  }
+  function injectEntry() {
+    if (!on()) return;
+    var menu = document.getElementById('main-menu');
+    if (!menu || document.getElementById('afk-cs-entry')) return;
+    var b = document.createElement('button');
+    b.id = 'afk-cs-entry';
+    b.textContent = '☁️ 雲端進度';
+    b.addEventListener('click', openPicker);
+    menu.appendChild(b);
   }
 
   function autoLink() {
@@ -470,6 +529,9 @@
   function init() {
     window.AFK_SETTINGS = window.AFK_SETTINGS || { _items: [], add: function (it) { this._items.push(it); } };
     window.AFK_SETTINGS.add({ label: '☁️ 雲端存檔同步', onClick: openModal });
+    // 首頁入口：#main-menu 是遊戲 js 之後才長出來的（且選角來回會重建）→ 輪詢補掛
+    injectEntry();
+    setInterval(injectEntry, 2000);
     if (getKey()) boot(); else autoLink();
     try { console.log('[AFK-cloudsync] hooks OK' + (getKey() ? ' — 已設定金鑰，自動同步中。' : ' — 尚未設定金鑰（⚙ 選單可設定）。')); } catch (e) {}
   }
