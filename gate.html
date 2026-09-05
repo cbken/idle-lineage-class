@@ -57,16 +57,6 @@
         button:active { transform: scale(.98); }
         .err { color: #e07a7a; font-size: 13px; margin-top: 12px; min-height: 18px; }
         .hidden { display: none; }
-        .players { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .players button {
-            margin-top: 0;
-            padding: 18px 10px;
-            font-size: 16px;
-            background: #2a3046;
-            border: 1px solid #3a4055;
-        }
-        .players button.cur { background: #4a5aa8; border-color: #6b7cc4; }
-        .players button .sub { display: block; font-size: 11px; font-weight: 400; color: #b8bdd0; margin-top: 4px; }
         .hint { font-size: 12px; color: #9aa0b5; margin-top: 18px; line-height: 1.7; }
     </style>
 </head>
@@ -81,39 +71,21 @@
             <button id="go">下一步</button>
             <div class="err" id="err"></div>
         </div>
-        <!-- 第二步：選玩家 -->
-        <div id="step-slot" class="hidden">
-            <div class="lock">👤</div>
-            <h1>你是玩家幾？</h1>
-            <p>一人一個號碼、進度各自獨立<br>同一個人的電腦和手機選同一號</p>
-            <div class="players">
-                <button data-s="1">👑 玩家1</button>
-                <button data-s="2">🎮 玩家2</button>
-                <button data-s="3">🎮 玩家3</button>
-                <button data-s="4">🎮 玩家4</button>
-            </div>
-            <div class="hint">選好直接進遊戲。之後這台裝置都直接進，<br>要換人玩再回這頁（遊戲裡 ☁️ 雲端存檔同步也能切）。</div>
-        </div>
+        <!-- 2026-09-05：原本這裡有第二步「你是玩家幾」，但它只是四顆光禿禿的按鈕、看不出哪個槽是誰，
+             而且選完會蓋掉遊戲裡那個有「角色數／最後遊玩時間」的選人畫面 → 使用者看到的還是舊體驗。
+             現在整步拿掉：通行碼過了就直接進遊戲，選人統一由 afk-cloudsync 的閘門負責（單一入口）。 -->
     </div>
     <script>
     (function(){
         var HASH = '94e441327a1592db2503342e37cb173870aa0c5cc2f3976e02bcca94f9210ec6';
-        var K_GATE = 'ilc_gate_ok', K_SLOTOK = 'ilc_slot_ok', K_SLOT = 'afk_cs_slot', K_SEEN = 'afk_cs_seen';
+        var K_GATE = 'ilc_gate_ok';
         function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
         function authed(){ return ls(K_GATE) === HASH; }
 
-        function showSlot(){
-            document.getElementById('step-pw').className = 'hidden';
-            var el = document.getElementById('step-slot');
-            el.className = '';
-            var cur = ls(K_SLOT);
-            Array.prototype.forEach.call(el.querySelectorAll('.players button'), function(b){
-                if (b.getAttribute('data-s') === cur) b.className = 'cur';
-            });
-        }
+        function enter(){ location.replace('./'); }   // 選人交給遊戲裡的閘門（那邊看得到各槽是誰）
 
-        // 已通過通行碼 → 直接跳到選玩家那步（讓人隨時可以回來換人）
-        if (authed()) showSlot();
+        // 通行碼過過了就直接進遊戲，不再多一步
+        if (authed()) enter();
 
         function sha256hex(str){
             return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function(buf){
@@ -128,7 +100,7 @@
             sha256hex(v).then(function(h){
                 if (h === HASH) {
                     try { localStorage.setItem(K_GATE, HASH); } catch(e){}
-                    showSlot();
+                    enter();
                 } else {
                     document.getElementById('err').textContent = '通行碼不對，再試一次';
                     document.getElementById('pw').value = '';
@@ -140,20 +112,6 @@
             if (e.key === 'Enter') submit();
         });
 
-        Array.prototype.forEach.call(document.querySelectorAll('.players button'), function(b){
-            b.addEventListener('click', function(){
-                var s = b.getAttribute('data-s');
-                try {
-                    if (ls(K_SLOT) !== s) localStorage.removeItem(K_SEEN);   // 換槽 = 改認另一份雲端存檔
-                    localStorage.setItem(K_SLOT, s);
-                    localStorage.setItem(K_SLOTOK, '1');
-                    // 這裡選過了就等於本分頁已確認 → 進遊戲後 afk-cloudsync 的選人閘門不用再問一次。
-                    // sessionStorage 在同分頁導頁後仍在，所以 location.replace('./') 之後讀得到。
-                    sessionStorage.setItem('afk_cs_slot_session', '1');
-                } catch(e){}
-                location.replace('./');
-            });
-        });
     })();
     </script>
 </body>
