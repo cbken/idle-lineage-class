@@ -53,7 +53,8 @@
   //   真正該省的是那 410ms（換掉 workers.dev 免費網域），不是砍掉同步即時性。
   var K_KEY  = 'afk_cs_key';    // 同步金鑰
   var K_SEEN = 'afk_cs_seen';   // 最後看過/寫過的雲端 ts（毫秒字串）
-  var K_SLOT = 'afk_cs_slot';   // 這台裝置的玩家槽 1~4（預設 1）
+  var K_SLOT = 'afk_cs_slot';   // 這台裝置的玩家槽 1~4（🚨 沒有預設值，見 getSlot）
+  var S_SLOTOK = 'afk_cs_slot_session';   // 這個分頁已確認過玩家身分（sessionStorage）
   var K_HASH = 'afk_cs_hash';   // 最後成功上傳那包的內容指紋（髒資料檢查用）
   var K_LEAD = 'afk_cs_lead';   // 跨分頁租約 "<分頁id>|<毫秒>"
   var K_WQ   = 'afk_cs_wq';     // 今日已用寫入數 "<UTC日期>|<次數>"
@@ -83,8 +84,20 @@
   function getKey()  { try { return localStorage.getItem(K_KEY) || ''; } catch (e) { return ''; } }
   function getSeen() { var n = Number(localStorage.getItem(K_SEEN)); return isFinite(n) ? n : 0; }
   function setSeen(ts) { try { localStorage.setItem(K_SEEN, String(ts)); } catch (e) {} }
-  function getSlot() { var s = localStorage.getItem(K_SLOT); return /^[1-4]$/.test(s) ? s : '1'; }
-  function apiUrl(key) { return ENDPOINT + '?key=' + encodeURIComponent(key) + '&slot=' + getSlot(); }
+  // 🚨 2026-09-05：這裡原本是 `: '1'`（沒選過就當玩家1）。
+  //    後果：新裝置／新瀏覽器／清過資料／直接開遊戲網址沒走 gate.html —— 通通落到玩家1，
+  //    而玩家1 是 Ken 本人 → 別人一開就拉走他的存檔，再一推就蓋掉。9/5 真的發生了（槽1 被玩家2 整份覆蓋）。
+  //    修法：不給預設值。沒選過就回空字串，由 slotGate() 擋住整個開機流程強制選人。
+  function getSlot() { var s = localStorage.getItem(K_SLOT); return /^[1-4]$/.test(s) ? s : ''; }
+  function slotChosen() {
+    if (!/^[1-4]$/.test(getSlot())) return false;
+    try { return sessionStorage.getItem(S_SLOTOK) === '1'; } catch (e) { return true; }   // 無 sessionStorage 就別擋死
+  }
+  function apiUrl(key) {
+    var s = getSlot();
+    if (!s) throw new Error('slot not chosen');   // 防呆：沒選人之前不准對雲端做任何事
+    return ENDPOINT + '?key=' + encodeURIComponent(key) + '&slot=' + s;
+  }
 
   // ── 額度四道閘門 ───────────────────────────────────────────
   // ① 跨分頁單一寫者：同一台裝置開 N 個分頁時，只有一個分頁跑定時上傳（其餘只讀不寫）。
@@ -689,9 +702,93 @@
       '.cs-slot:hover{background:#273449;color:#e2e8f0;}',
       '.cs-slot.on{background:#0e7490;border-color:#0891b2;color:#cffafe;}',
       '.cs-ghost{background:transparent;border:1px dashed #475569;color:#94a3b8;font-weight:400;}',
-      '.cs-ghost:hover{border-color:#0891b2;color:#7dd3fc;}'
+      '.cs-ghost:hover{border-color:#0891b2;color:#7dd3fc;}',
+      // 🚪 開機選人閘門（全螢幕擋住，沒選不給玩）
+      '#cs-gate{position:fixed;inset:0;z-index:100000;background:rgba(2,6,23,.96);display:flex;align-items:center;justify-content:center;padding:20px 14px;font-family:system-ui,"Segoe UI",sans-serif;}',
+      '#cs-gate-card{background:#0f172a;border:1px solid #334155;border-radius:14px;max-width:460px;width:100%;padding:22px 18px;box-shadow:0 12px 40px rgba(0,0,0,.7);}',
+      '#cs-gate-title{color:#7dd3fc;font-size:20px;font-weight:800;text-align:center;margin-bottom:4px;}',
+      '#cs-gate-sub{color:#94a3b8;font-size:12.5px;text-align:center;margin-bottom:16px;}',
+      '.cs-gs{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;margin-bottom:9px;padding:12px 14px;border-radius:10px;cursor:pointer;text-align:left;font-family:inherit;background:#1e293b;border:1px solid #334155;transition:background .12s,border-color .12s;}',
+      '.cs-gs:hover{background:#273449;border-color:#0891b2;}',
+      '.cs-gs-n{color:#e2e8f0;font-size:15px;font-weight:700;}',
+      '.cs-gs-d{color:#94a3b8;font-size:12px;}',
+      '.cs-gs-empty{color:#64748b;font-style:italic;}',
+      // 常駐身分標示
+      '#cs-badge{position:fixed;left:6px;bottom:6px;z-index:9998;background:rgba(15,23,42,.85);border:1px solid #334155;color:#7dd3fc;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;cursor:pointer;font-family:system-ui,sans-serif;pointer-events:auto;}',
+      '#cs-badge:hover{background:#1e293b;color:#cffafe;}'
     ].join('\n');
     (document.head || document.documentElement).appendChild(s);
+  }
+
+  // ── 🚪 開機選人閘門（2026-09-05 Ken 拍板：「進去就點選你是玩一還是玩二，這樣紀錄永遠不會錯」）──
+  //    在此之前是「沒選過就預設玩家1」，導致新裝置/清資料的人一開就踩進玩家1（Ken）的存檔並蓋掉。
+  //    現在：沒選過 → 擋住整個同步流程，強制選；每個新分頁都要確認一次（sessionStorage）。
+  //    按鈕上直接標出各槽是誰（角色數／等級／最後遊玩），選錯的機會降到最低。
+  var CLS_CN = { royal:'王族', knight:'騎士', warrior:'戰士', elf:'妖精',
+                 mage:'法師', dark:'黑暗妖精', dragon:'龍騎', illusion:'幻術' };
+  function fmtAgo(ts) {
+    if (!ts) return '';
+    var s = Math.max(0, (Date.now() - ts) / 1000);
+    if (s < 3600) return Math.floor(s / 60) + ' 分鐘前';
+    if (s < 86400) return Math.floor(s / 3600) + ' 小時前';
+    return Math.floor(s / 86400) + ' 天前';
+  }
+  function slotGate(done) {
+    injectCSS();
+    var box = document.createElement('div');
+    box.id = 'cs-gate';
+    var h = '<div id="cs-gate-card"><div id="cs-gate-title">你是玩家幾？</div>'
+          + '<div id="cs-gate-sub">選錯會讀到別人的存檔，請確認清楚。</div>';
+    for (var i = 1; i <= 4; i++) {
+      h += '<button class="cs-gs" data-s="' + i + '">'
+         + '<span class="cs-gs-n">' + (i === 1 ? '👑' : '🎮') + ' 玩家' + i + '</span>'
+         + '<span class="cs-gs-d" id="cs-gs-d' + i + '">讀取中…</span></button>';
+    }
+    box.innerHTML = h + '</div>';
+    document.body.appendChild(box);
+
+    // 摘要：一次要求拿四個槽（伺服器端已縮成幾百 bytes）。失敗就只是沒有副標，不擋選人。
+    try {
+      fetch(ENDPOINT + '?key=' + encodeURIComponent(FIXED_KEY) + '&slot=1&summary=1', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (!j || !j.slots) return;
+          j.slots.forEach(function (s) {
+            var el = document.getElementById('cs-gs-d' + s.slot);
+            if (!el) return;
+            if (s.empty || !s.chars) { el.textContent = '（空的，還沒有存檔）'; el.className = 'cs-gs-d cs-gs-empty'; return; }
+            var t = (s.top ? (CLS_CN[s.top.cls] || s.top.cls) + ' Lv' + s.top.lv + ' · ' : '') + s.chars + ' 個角色';
+            var ago = fmtAgo(s.ts);
+            el.textContent = t + (ago ? '　最後遊玩 ' + ago : '');
+          });
+        })
+        .catch(function () {});
+    } catch (e) {}
+
+    Array.prototype.forEach.call(box.querySelectorAll('.cs-gs'), function (b) {
+      b.addEventListener('click', function () {
+        var s = b.getAttribute('data-s');
+        try {
+          if (localStorage.getItem(K_SLOT) !== s) setSeen(0);   // 換人 = 改認另一份雲端存檔，seen 歸零重拉
+          localStorage.setItem(K_SLOT, s);
+          localStorage.setItem('ilc_slot_ok', '1');             // 與 gate.html 同一個旗標
+          sessionStorage.setItem(S_SLOTOK, '1');
+        } catch (e) {}
+        box.remove();
+        done();
+      });
+    });
+  }
+  // 常駐標示現在是誰，免得玩到一半才發現選錯。純裝飾 → 整段包起來，絕不能因為它失敗就擋住同步。
+  function slotBadge() {
+    try {
+      var s = getSlot(); if (!s) return;
+      var el = document.getElementById('cs-badge');
+      if (!el) { el = document.createElement('div'); el.id = 'cs-badge'; document.body.appendChild(el); }
+      el.textContent = '玩家' + s;
+      el.title = '目前是玩家' + s + '（點一下可換人）';
+      el.onclick = function () { try { sessionStorage.removeItem(S_SLOTOK); } catch (e) {} location.reload(); };
+    } catch (e) {}
   }
 
   function init() {
@@ -700,10 +797,23 @@
     // 首頁入口：#main-menu 是遊戲 js 之後才長出來的（且選角來回會重建）→ 輪詢補掛
     injectEntry();
     setInterval(injectEntry, 2000);
-    // 金鑰已定案為固定家庭金鑰：任何裝置存著別的（舊隨機金鑰＝按過「產生新金鑰」的孤兒）
-    // → 一律歸隊：走 autoLink 蓋成 FIXED_KEY + 重新對進度（2026-08-19 公司機就是這樣跑丟的）
-    if (getKey() === FIXED_KEY) boot(); else autoLink();
-    try { console.log('[AFK-cloudsync] hooks OK' + (getKey() ? ' — 已設定金鑰，自動同步中。' : ' — 尚未設定金鑰（⚙ 選單可設定）。')); } catch (e) {}
+    var go = function () {
+      slotBadge();
+      // 金鑰已定案為固定家庭金鑰：任何裝置存著別的（舊隨機金鑰＝按過「產生新金鑰」的孤兒）
+      // → 一律歸隊：走 autoLink 蓋成 FIXED_KEY + 重新對進度（2026-08-19 公司機就是這樣跑丟的）
+      if (getKey() === FIXED_KEY) boot(); else autoLink();
+      try { console.log('[AFK-cloudsync] hooks OK — 玩家' + getSlot()); } catch (e) {}
+    };
+    if (slotChosen()) { go(); return; }
+    // 畫不出選人畫面時的降級：已經選過槽位就照舊用（安全，只是少了本次確認）；
+    // 完全沒選過才真的擋住 —— 那時寧可不同步，也不能再預設成玩家1 把別人存檔蓋掉。
+    try {
+      slotGate(go);
+    } catch (e) {
+      try { console.warn('[AFK-cloudsync] 選人畫面失敗：' + (e && e.message)); } catch (e2) {}
+      if (/^[1-4]$/.test(getSlot())) go();
+      else try { console.error('[AFK-cloudsync] 尚未選擇玩家，暫停同步以免蓋到別人的存檔。'); } catch (e2) {}
+    }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
