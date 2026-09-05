@@ -147,6 +147,9 @@
                     if (ls(K_SLOT) !== s) localStorage.removeItem(K_SEEN);   // 換槽 = 改認另一份雲端存檔
                     localStorage.setItem(K_SLOT, s);
                     localStorage.setItem(K_SLOTOK, '1');
+                    // 這裡選過了就等於本分頁已確認 → 進遊戲後 afk-cloudsync 的選人閘門不用再問一次。
+                    // sessionStorage 在同分頁導頁後仍在，所以 location.replace('./') 之後讀得到。
+                    sessionStorage.setItem('afk_cs_slot_session', '1');
                 } catch(e){}
                 location.replace('./');
             });
