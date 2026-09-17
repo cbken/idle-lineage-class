@@ -218,16 +218,16 @@
 
   var _applying = false;
   function applyCloud(cloudTs, pack, myKey) {
-    _applying = true;
+    _applying = true; _applyAt = Date.now();
     var mySlot = getSlot();   // clear 前先記下，槽位屬於「這台裝置」不跟著存檔走
     var myGate = null; try { myGate = localStorage.getItem('ilc_gate_ok'); } catch (e) {}
     // 今日額度計數與玩家數不能被 clear 洗掉（洗掉＝守門員歸零，額度保護失效）
     var myWq = null, myNp = null;
     try { myWq = localStorage.getItem(K_WQ); myNp = localStorage.getItem(K_NP); } catch (e) {}
     var names = Object.keys(pack.keys);
-    try { localStorage.clear(); } catch (e) { _applying = false; return false; }
+    try { localStorage.clear(); } catch (e) { _applying = false; _applyAt = 0; return false; }
     for (var i = 0; i < names.length; i++) {
-      if (!rawWrite(names[i], pack.keys[names[i]])) { _applying = false; return false; }
+      if (!rawWrite(names[i], pack.keys[names[i]])) { _applying = false; _applyAt = 0; return false; }
     }
     // 金鑰/槽位/seen 必須是「這台裝置的視角」：金鑰槽位照舊、seen = 剛套用的雲端 ts
     try { localStorage.setItem(K_KEY, myKey); localStorage.setItem(K_SLOT, mySlot); } catch (e) {}
@@ -244,18 +244,70 @@
   var _busy = false, _lastPushAt = 0, _pendingPush = false, _onPushOk = null;
   var _backoffUntil = 0, _conflicts = 0;   // 跟別台裝置搶同一槽時的退避
 
+  // 🚨 2026-09-17 卡死自救（Ken 實際踩到）：原本 fetch 沒有任何逾時，_busy/_applying 也沒有
+  //    解鎖機制。手機在傳送途中休眠、或 Wi-Fi 切行動網路時，fetch 會永遠停在 pending
+  //    —— then 和 catch 都不會觸發 → _busy 永遠是 true → 之後每次 push 都只登記 pending
+  //    就 return → 整個同步靜默死亡，連使用者親手按的「立即儲存」也被自己擋掉，
+  //    而且從外面完全看不出來（Worker 端是零請求，不是錯誤）。
+  //    三道保險：① 每個請求都有 AbortController 逾時 ② 旗標卡太久強制解鎖
+  //             ③ 失敗原因如實回報，不要再一律說「額度滿了」。
+  var NET_TIMEOUT_MS  = 30 * 1000;   // 單次請求上限（存檔包大，手機慢網路要留餘裕）
+  var STUCK_MS        = 60 * 1000;   // 背景自動推：旗標卡這麼久＝不可能還在傳
+  var STUCK_MANUAL_MS = 10 * 1000;   // 使用者在等：門檻放寬到 10 秒就當卡死
+  var _busyAt = 0, _applyAt = 0, _lastFail = '';
+
+  // 帶逾時的 fetch：逾時會走 reject → 現有的 .catch 會把 _busy 放掉
+  function fetchT(url, opts) {
+    opts = opts || {};
+    if (typeof AbortController !== 'function') return fetch(url, opts);
+    var ac = new AbortController(), tid = null;
+    try { opts.signal = ac.signal; } catch (e) {}
+    tid = setTimeout(function () { try { ac.abort(); } catch (e) {} }, NET_TIMEOUT_MS);
+    return fetch(url, opts).then(
+      function (r) { clearTimeout(tid); return r; },
+      function (e) { clearTimeout(tid); throw e; }
+    );
+  }
+
+  // 卡死解鎖：在每次要推/拉之前呼叫
+  function unstick(limit) {
+    var now = Date.now();
+    if (_busy && _busyAt && now - _busyAt > limit) {
+      try { console.warn('[AFK-cloudsync] 上一個請求卡住 ' + Math.round((now - _busyAt) / 1000) + ' 秒沒回應 → 強制解鎖重來'); } catch (e) {}
+      _busy = false; _busyAt = 0; _pendingPush = false;
+    }
+    // 套用雲端後本來會馬上 reload；沒 reload 成功（手機在背景常見）就別鎖死同步
+    if (_applying && _applyAt && now - _applyAt > limit) {
+      try { console.warn('[AFK-cloudsync] 套用雲端後沒有重新載入 → 解除套用鎖'); } catch (e) {}
+      _applying = false; _applyAt = 0;
+    }
+  }
+
+  // 失敗原因 → 給玩家看的白話（以前一律報「額度滿了」，誤導過 Ken 一次）
+  function failMsg(why) {
+    if (why === 'off')        return '❌ 沒存成功：「雲端存檔同步」這個功能目前是關閉的。到 ⚙️ 其他功能 → ☁️ 雲端存檔同步 打開再試一次。';
+    if (why === 'quota')      return '⏳ 沒存成功：雲端今日寫入額度已滿。進度留在這台，額度重置後會自動補傳。';
+    if (why === 'conflict')   return '⚠️ 沒存成功：雲端上有別台裝置更新的進度，已改成先拉下來對。請重開遊戲頁確認後再存一次。';
+    if (why === 'noprogress') return '❌ 這台目前沒有可以儲存的進度。';
+    if (why === 'nokey')      return '❌ 沒存成功：這台還沒連上同步金鑰。';
+    return '❌ 沒存成功：連不上雲端（網路不穩或請求逾時）。進度還在這台，等一下會自動再試。';
+  }
+
   // 收尾：解除 busy；若期間有被擋掉的推（最常見：關頁前 hidden 推撞上進行中的拉）補推一次
   function release() {
-    _busy = false;
+    _busy = false; _busyAt = 0;
     if (_pendingPush && !_applying) { _pendingPush = false; push('retry'); }
   }
 
   function push(reason) {
-    if (!on() || _applying) return;
+    var isManual = (reason === 'manual');
+    unstick(isManual ? STUCK_MANUAL_MS : STUCK_MS);   // 先把卡死的旗標放掉，否則下面全是空轉
+    if (!on())      { _lastFail = 'off';        return; }
+    if (_applying)  { _lastFail = 'applying';   return; }
     if (_busy) { _pendingPush = true; return; }   // 別默默丟掉：等在途請求結束後補推
-    var key = getKey(); if (!key) return;
+    var key = getKey(); if (!key) { _lastFail = 'nokey'; return; }
     // 🛡️ 空裝置不准上傳：沒有實際遊戲進度的包推上去，會在別台跳出誤導的「雲端已有存檔」
-    if (!localHasProgress()) return;
+    if (!localHasProgress()) { _lastFail = 'noprogress'; return; }
 
     // 使用者親手按的覆蓋動作不受節流限制（他在等結果，不能靜靜跳過）
     var forced = (reason === 'forcelink' || reason === 'firstrun' || reason === 'manual');
@@ -271,33 +323,38 @@
     fp = packFingerprint(pack);
     if (!forced && fp && fp === getHash()) { _lastPushAt = now; return; }
 
-    _busy = true;
+    _busy = true; _busyAt = Date.now();
     var ts = Math.max(now, getSeen() + 1);   // 裝置時鐘落後也保持單調遞增
     var body;
     try { body = JSON.stringify({ ts: ts, baseTs: getSeen(), pack: pack }); }
     catch (e) { _busy = false; return; }
-    fetch(apiUrl(key), {
+    fetchT(apiUrl(key), {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body
     }).then(function (r) {
       if (r.status === 409) {
         // 別台裝置寫過更新的 → 不准蓋，改拉（pending 推作廢：馬上要套更新的雲端版了）
         _conflicts++;
         _backoffUntil = Date.now() + Math.min(5 * 60 * 1000, 30 * 1000 * Math.pow(2, _conflicts - 1));
-        _busy = false; _pendingPush = false;
+        _busy = false; _busyAt = 0; _pendingPush = false;
+        _lastFail = 'conflict';
         pull('conflict');
         return;
       }
       if (r.ok) {
+        _lastFail = '';
         setSeen(ts); setHash(fp); bumpWrites();
         _lastPushAt = Date.now(); _backoffUntil = 0; _conflicts = 0;
         setStatus('☁️ 已上傳 ' + fmtT(_lastPushAt) + '（今日 ' + writesToday() + '/1000）');
         if (_onPushOk) { var f = _onPushOk; _onPushOk = null; try { f(); } catch (e) {} }
       } else if (r.status === 503) {
         // 雲端寫入額度用完 → 本機進度沒動、雲端舊存檔也沒動，等額度重置後下一輪自然補上
+        _lastFail = 'quota';
         setStatus('⏳ 雲端今日寫入額度已滿，進度暫存在這台、稍後自動補上傳。', true);
+      } else {
+        _lastFail = 'http' + r.status;   // 沒被上面接住的狀態碼，別靜靜吞掉
       }
       release();
-    }).catch(function () { _busy = false; _pendingPush = false; /* 離線就算了，下一輪再推 */ });
+    }).catch(function () { _busy = false; _busyAt = 0; _pendingPush = false; _lastFail = 'net'; /* 離線/逾時：下一輪再推 */ });
   }
 
   // 💾 手動儲存（2026-08-26）：包一層 push('manual')，成功或失敗都一定要回應。
@@ -305,20 +362,25 @@
   //    reason='manual' 屬 forced → 不受最小間隔／髒檢查／額度守門影響，按了就是真的送出去。
   function savingNow(cb) {
     var done = false, t0 = Date.now();
-    _onPushOk = function () { if (!done) { done = true; cb(true); } };
+    _lastFail = '';
+    _onPushOk = function () { if (!done) { done = true; cb(true, ''); } };
     (function attempt() {
       if (done) return;
-      if (Date.now() - t0 > 12000) { done = true; _onPushOk = null; cb(false); return; }
+      // 等到比單次請求逾時(30s)再多一點，否則「請求其實還在跑」也會被誤報成失敗
+      if (Date.now() - t0 > NET_TIMEOUT_MS + 5000) {
+        done = true; _onPushOk = null; cb(false, _lastFail || 'net'); return;
+      }
       push('manual');                       // 若正好有推在途中 → 只登記 pending，不會重複送
       setTimeout(attempt, 1200);            // 沒成功就再試，撐到逾時為止
     })();
   }
 
   function pull(reason) {
+    unstick(reason === 'manual' ? STUCK_MANUAL_MS : STUCK_MS);
     if (!on() || _busy || _applying) return;
     var key = getKey(); if (!key) return;
-    _busy = true;
-    fetch(apiUrl(key), { cache: 'no-store' }).then(function (r) {
+    _busy = true; _busyAt = Date.now();
+    fetchT(apiUrl(key), { cache: 'no-store' }).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (j) {
@@ -333,7 +395,7 @@
         setStatus('⚠️ 雲端那份是空存檔、這台有實際進度 → 未套用（下次上傳會把雲端蓋成這台的版本）。');
         release(); return;
       }
-      _busy = false;   // 進套用流程：_applying 會接手擋推，busy 解除但不補推
+      _busy = false; _busyAt = 0;   // 進套用流程：_applying 會接手擋推，busy 解除但不補推
       // 🚨 套用會蓋掉本機進度 → 只在「雲端確實比較新」時做，做完立刻 reload
       //    （fullsave 的教訓：不 reload 的話，記憶體裡的舊 player 5 秒後就把還原的內容蓋回去）
       if (applyCloud(j.ts, j.pack, key)) {
@@ -342,7 +404,7 @@
       } else {
         setStatus('❌ 套用雲端進度失敗（儲存空間可能不足）。本機資料可能不完整，請到「完整資料備份與還原」用備份檔救回。', true);
       }
-    }).catch(function () { _busy = false; _pendingPush = false; if (reason === 'manual') setStatus('❌ 連不上雲端（沒網路或服務未部署）。', true); });
+    }).catch(function () { _busy = false; _busyAt = 0; _pendingPush = false; if (reason === 'manual') setStatus('❌ 連不上雲端（網路不穩或請求逾時）。', true); });
   }
 
   // ── 自動連結（固定金鑰） ──────────────────────────────────
@@ -462,9 +524,8 @@
           }
           d.remove();
           setSeen(Math.max(Date.now(), (j && j.ts) || 0));   // 讓樂觀鎖放行
-          savingNow(function (ok) {
-            window.alert(ok ? '✅ 已儲存到雲端，可以安心關掉了。'
-                            : '❌ 存不進去（沒網路或雲端額度滿了）。進度還在這台，等一下會自動再試。');
+          savingNow(function (ok, why) {
+            window.alert(ok ? '✅ 已儲存到雲端，可以安心關掉了。' : failMsg(why));
           });
         });
         var cb = d.querySelector('.csp-cloud');
