@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <!-- 🔒 私人通行碼閘門：沒通過 gate.html 驗證前直接跳轉、不載入遊戲（家庭私用） -->
+    <!-- 🚨 2026-09-20：這裡只能檢查 ilc_gate_ok。原本還檢查 ilc_slot_ok，但那個旗標是
+         「遊戲頁載入後、玩家點了 afk-cloudsync 的選人畫面」才會被設上去的 —— 在這裡擋，
+         新裝置就永遠到不了能設它的那一步：index 踢回 gate → gate 見通行碼已過又送回 index
+         → 無限 reload，連輸入框都碰不到（Ken 的筆電實際踩到）。
+         選人由遊戲裡那個看得到角色數/最後遊玩時間的閘門負責，這裡只管通行碼。 -->
     <meta name="robots" content="noindex, nofollow">
-    <script>(function(){var H='94e441327a1592db2503342e37cb173870aa0c5cc2f3976e02bcca94f9210ec6';try{if(localStorage.getItem('ilc_gate_ok')!==H||localStorage.getItem('ilc_slot_ok')!=='1'){location.replace('gate.html');}}catch(e){location.replace('gate.html');}})();</script>
+    <script>(function(){var H='94e441327a1592db2503342e37cb173870aa0c5cc2f3976e02bcca94f9210ec6';try{if(localStorage.getItem('ilc_gate_ok')!==H){location.replace('gate.html');}}catch(e){location.replace('gate.html');}})();</script>
     <!-- 🚀 v3.0.74 移植參考版優化：禁止瀏覽器快取 HTML→改檔後玩家重整即拿到新版 js/css（免手動硬重載/清快取） -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
