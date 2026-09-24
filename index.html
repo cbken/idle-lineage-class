@@ -559,15 +559,15 @@
     </script>
 
     <script src="js/anim-manifest.js?v=8168f3d2c7.8.12-necro-relics"></script>
-    <script src="js/00-data.js?v=2f8dce5aab.8.34-merc-trial-class-loot"></script>
-<script src="js/01-drops-config.js?v=97c2d34557.8.26-flywing-relics"></script>
-<script src="js/02-stats-recompute.js?v=0209ba097c.8.26-flywing-relics"></script>
-    <script src="js/03-combat-core.js?v=061ad25cbd.8.26-flywing-relics"></script>
+    <script src="js/00-data.js?v=3d05ccda4a.8.34-merc-trial-class-loot"></script>
+<script src="js/01-drops-config.js?v=2290ffd792.8.26-flywing-relics"></script>
+<script src="js/02-stats-recompute.js?v=57b1c87dd8.8.26-flywing-relics"></script>
+    <script src="js/03-combat-core.js?v=4f6c7e0604.8.26-flywing-relics"></script>
     <script src="js/04-combat-attack.js?v=a3772e77b4.8.26-flywing-relics"></script>
-<script src="js/05-kill-progression.js?v=7a8adb68e6.8.34-merc-trial-class-loot"></script>
-    <script src="js/06-status-allies.js?v=f7f26341f6.8.34-merc-trial-class-loot"></script>
+<script src="js/05-kill-progression.js?v=eb9a296b29.8.34-merc-trial-class-loot"></script>
+    <script src="js/06-status-allies.js?v=f3d9b433a3.8.34-merc-trial-class-loot"></script>
     <script src="js/07-skills-cast.js?v=4fd4b0a386.8.26-flywing-relics"></script>
-<script src="js/08-items-equip.js?v=73fee2a2a9.8.16-wis-regen-interval"></script>
+<script src="js/08-items-equip.js?v=f90654a076.8.16-wis-regen-interval"></script>
 <script src="js/09-vfx-render.js?v=1d2db72192.8.32-merc-vfx-origin"></script>
     <script src="js/10-ui-tabs.js?v=f05ab31579.8.14-merc-guild"></script>
 <script src="js/11-world-map.js?v=dce16f586a.8.17-item-stack-source"></script>
@@ -585,8 +585,8 @@
     <script src="js/22-pets.js?v=665accdc36.8.23-sherine-set-rework"></script>
     <script src="js/24-pandora-relic-market.js?v=e6bd019fcb.7.70"></script>
     <script src="js/25-clan-system.js?v=c78fb35df2.8.7-social-private"></script>
-    <script src="js/26-world-channel.js?v=9f45eaff51.8.13-private-bond"></script>
-<script src="js/28-pvp-arena.js?v=3448feb9f9.7.89-stage33-host-sign"></script>
+    <script src="js/26-world-channel.js?v=94448d43c6.8.13-private-bond"></script>
+<script src="js/28-pvp-arena.js?v=e2d8477616.7.89-stage33-host-sign"></script>
 <script src="js/29-siege-v2-data.js?v=eae6887df7.7.63-siege-v2"></script>
 <script src="js/30-siege-v2.js?v=616f9643f4.7.89-castle-ring-layout"></script>
 <script src="js/31-castle-guards.js?v=91544fd42d.8.23-sherine-set-rework"></script>
@@ -598,11 +598,11 @@
          無開關：這是顯示正確性，不是功能。實測 forceDarkModeEnabled+darkModeImagePolicy=smart 可重現、加這行即解。 -->
     <style>:root{color-scheme:dark}</style>
     <!-- afk-toggles 必須最先載入：外掛開關中樞（逃生門，自己不可被關；某支外掛壞掉時玩家關掉它就能用原版繼續玩） -->
-    <script src="afk-toggles.js?v=7906ddd52d"></script>
+    <script src="afk-toggles.js?v=7803435f68"></script>
     <!-- afk-banner：非官方轉載橫幅讓位（基礎設施、無開關；不可掛在 afk-mobile 裡，玩家關掉手機版面就會整個頂端被蓋住） -->
     <script src="afk-banner.js?v=29fa2d5746"></script>
     <!-- afk-nobanner：隱藏非官方橫幅（預設關；只藏不刪＝不跟 gameLoop 的重掛打架，確認過才生效） -->
-    <script src="afk-nobanner.js?v=07adf6960d"></script>
+    <script src="afk-nobanner.js?v=7ea1d1d980"></script>
     <!-- 存檔解壓快取：必須排在所有會讀 localStorage 的外掛之前（核心每殺一隻怪都重解壓一次血盟狀態） -->
     <script src="afk-lzcache.js?v=1b86b3d102"></script>
     <!-- afk-synccompress：存檔即時壓縮（預設關）——開啟後把 _lzSet 換回同步壓縮，根治登出/多開後存檔未壓縮爆滿。緊接 lzcache、在任何會存檔的外掛之前 -->
@@ -636,8 +636,8 @@
     <!-- 整包備份／還原（本機檔案）：入口掛在 afk-storage 的設定選單裡，必須排在它之後 -->
     <script src="afk-fullsave.js?v=79af4b3787"></script>
     <!-- 雲端存檔同步（cbken 加掛）：入口掛在 afk-storage 的設定選單裡，必須排在它之後 -->
-    <script src="afk-cloudsync.js?v=14"></script>
-<script src="afk-textmode.js?v=1"></script>
+    <script src="afk-cloudsync.js?v=f06e8439d4"></script>
+<script src="afk-textmode.js?v=8b6e313154"></script>
     <!-- 存檔空間警告：localStorage 用量 >80% 時首頁紅色警告(唯讀;與 afk-storage 同一套估算) -->
     <script src="afk-quotawarn.js?v=18a1cae9ee"></script>
     <!-- 首頁公告卡（通用框架：檔頭 NOTICE 設成 null 就不顯示，要發公告時填一組設定即可） -->
