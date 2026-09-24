@@ -1,5 +1,5 @@
 /* ============================================================================
- * afk-leveldrop.js — 血盟敵人／玩家 NPC 身上噴的裝「依等級挑貨」
+ * afk-leveldrop.js — 玩家 NPC（敵對血盟成員／白目／PvP 玩家）身上噴的裝「依等級挑貨」
  *
  * 站主 2026-09-24 拍板（方案 C）：「都掉一些爛貨新手裝根本就沒有意義」。
  *
@@ -18,8 +18,9 @@
  *   ・篩完是空的（理論上不會）→ 退回上游原函式
  *   ・抽籤沿用 lootRng('gacha')（committed RNG，SL 重讀同結果，與上游一致）
  *
- * 只攔 doubleNonRare === true 的呼叫＝全專案只有 pledgeBonusDrop 一處（血盟敵人、白目/PVP 玩家 NPC、
- * 私訊送禮）。潘朵拉黑市本身（js/14 呼叫 false）完全不受影響。
+ * 只攔 doubleNonRare === true 的呼叫＝全專案只有 pledgeBonusDrop 一處。實際會觸發的是 js/05 的
+ * trollPlayer（白目／PVP 玩家 NPC，NPC 血盟群戰的敵盟成員也是這類）與 js/26 私訊送禮；
+ * 攻城敵人那條在攻城區內本來就不掉（pledgeBonusDrop 第一行擋掉），野外 esti_enemy 這類血盟怪不走這條。潘朵拉黑市本身（js/14 呼叫 false）完全不受影響。
  * 關掉開關＝與上游位元組等價。
  *
  * ⚠️ 同步上游時要看一眼：getWeightedGachaResult 的篩選條件（卡片排除、gachaWeight 正規化）若改了，
@@ -29,8 +30,8 @@
     'use strict';
 
     if (window.AFK_TOGGLES) AFK_TOGGLES.register({
-        id: 'leveldrop', name: '血盟敵人噴裝依等級', group: '遊戲玩法', def: true,
-        desc: '血盟敵人、白目／PvP 玩家身上噴的裝備，只會是接近你等級的東西（不再大半是新手裝）；掉率不變'
+        id: 'leveldrop', name: '玩家 NPC 噴裝依等級', group: '遊戲玩法', def: true,
+        desc: '敵對血盟成員、白目／PvP 玩家等「玩家 NPC」身上噴的東西（含私訊送禮），只會是接近你等級的（不再大半是新手裝）；掉率不變'
     });
 
     var orig = window.getWeightedGachaResult;
@@ -66,12 +67,14 @@
                 arr.forEach(function (e) { var id = Array.isArray(e) ? e[0] : (e && e.id); if (id) (lvs[id] = lvs[id] || []).push(lv); });
             }
         });
-        _itemLv = {};
+        var built = {};   // 先建完整的區域表、全部成功才指定（中途出錯不會把殘缺表永久快取住）
         for (var id in DB.items) {
+            if (!DB.items[id]) continue;
             var a = lvs[id], med = 1;
             if (a && a.length) { a.sort(function (x, y) { return x - y; }); med = a[Math.floor((a.length - 1) / 2)]; }
-            _itemLv[id] = Math.max(med, priceLv(DB.items[id].p));
+            built[id] = Math.max(med, priceLv(DB.items[id].p));
         }
+        _itemLv = built;
         return _itemLv;
     }
 
@@ -83,7 +86,7 @@
         var tbl = itemLvTable(), pool = [], total = 0;
         for (var id in DB.items) {
             var it = DB.items[id];
-            if (it.eff === 'card') continue;
+            if (!it || it.eff === 'card') continue;
             var w = it.gachaWeight !== undefined ? it.gachaWeight : 0;
             if (!(w > 0)) continue;
             if ((tbl[id] || 1) < floor) continue;
