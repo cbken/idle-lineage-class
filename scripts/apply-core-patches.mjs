@@ -402,7 +402,71 @@ function patchIllusionSetWpnProc() {
   }
 }
 
-const PATCHES = [patchMaybeSpawnMobs, patchTradEnHook, patch16Slots, patchPetAnimTicker, patchBossHuntEscape, patchUseItemKeepModal, patchSellNowNoForce, patchInsigniaOrder, patchGiltasWandRecompute, patchEyeSlotInEquipList, patchRelicAffixHook, patchIllusionSetWpnProc];
+// ── 補丁 13：等級上限 100 → 200（玩家＋傭兵；寵物維持 100）──────────────────────
+//   站主 2026-09-24 拍板：開到 Lv200、經驗曲線直接延伸原作 Lv70-99 公式（慢慢掛）。
+//   上限是「散在各檔的字面值 100」，沒有常數可包 → 只能錨點改字面值。
+//   ・getExpReq：Lv100~199 = (lv²+1) × EXP_REQ_LV69_KILLS（同 Lv70-99 公式延伸）；Lv200 沿用原本那行回 Infinity。
+//   ・夾值（sanitizeState / recomputeStats / PvP 名片）、升級迴圈（玩家 checkLvUp、傭兵、經驗轉移）、
+//     經驗條、快轉進度計算全部同步 → 缺一處就是「半套修改」（例：只放寬升級、沒放寬夾值 → 讀檔被砍回 100）。
+//   刻意不動：寵物上限（js/22，寵物≤min(100,玩家等級)）、一次性經驗遷移（js/13 expMigV，舊存檔已跑過）、
+//     裂痕怪等級上限（js/05 pickRift，那是怪物等級）、js/27（上游離線檔，index 未載入，離線走 afk-offline）。
+//   每個錨點都驗「恰好出現 N 次」，數不對就 exit 1（上游改寫過 → 人工重看，不猜）。
+const LV_CAP = 200;
+function patchLevelCap200() {
+  const C = String(LV_CAP);
+  // [檔, 原文, 改成, 預期次數, 說明]
+  const SITES = [
+    ['js/00-data.js', 'function getExpReq(lv) {',
+      `function getExpReq(lv) {   /* 🔌 加掛版補丁:Lv100~${LV_CAP - 1} 延伸 Lv70-99 公式 */ if (lv >= 100 && lv < ${C}) return (lv * lv + 1) * EXP_REQ_LV69_KILLS;`, 1, '經驗需求 Lv100+'],
+    ['js/00-data.js', 'function getExpGainMult(lv) { return lv >= 100 ? 0 : 1; }',
+      `function getExpGainMult(lv) { return lv >= ${C} ? 0 : 1; }`, 1, '滿等不拿經驗'],
+    ['js/01-drops-config.js', 'player.lv   = Math.max(1, Math.min(100, Math.floor(fin(player.lv, 1)) || 1));',
+      `player.lv   = Math.max(1, Math.min(${C}, Math.floor(fin(player.lv, 1)) || 1));`, 1, 'sanitizeState 夾值'],
+    ['js/02-stats-recompute.js', "if (typeof p.lv === 'number') p.lv = Math.max(1, Math.min(100, Math.floor(p.lv) || 1));",
+      `if (typeof p.lv === 'number') p.lv = Math.max(1, Math.min(${C}, Math.floor(p.lv) || 1));`, 1, 'recomputeStats 夾值'],
+    ['js/03-combat-core.js', 'let lv = Math.max(1, Math.min(100, Math.floor(Number(player.lv) || 1)));',
+      `let lv = Math.max(1, Math.min(${C}, Math.floor(Number(player.lv) || 1)));`, 1, '快轉經驗進度·玩家'],
+    ['js/03-combat-core.js', 'let lv = Math.max(1, Math.min(100, Math.floor(Number(a.lv) || 1)));',
+      `let lv = Math.max(1, Math.min(${C}, Math.floor(Number(a.lv) || 1)));`, 1, '快轉經驗進度·傭兵'],
+    ['js/05-kill-progression.js', "player && (player.lv || 1) >= 100) ? '<span class=\"text-slate-500\">（滿等·參考值）</span>'",
+      `player && (player.lv || 1) >= ${C}) ? '<span class="text-slate-500">（滿等·參考值）</span>'`, 1, '滿等經驗註記'],
+    ['js/05-kill-progression.js', 'while ((a.lv || 1) < 100 && a.exp >= getExpReq(a.lv))',
+      `while ((a.lv || 1) < ${C} && a.exp >= getExpReq(a.lv))`, 1, '傭兵升級迴圈'],
+    ['js/05-kill-progression.js', 'if ((a.lv || 1) >= 100) a.exp = 0;',
+      `if ((a.lv || 1) >= ${C}) a.exp = 0;`, 1, '傭兵滿等清經驗'],
+    ['js/05-kill-progression.js', 'while(player.lv < 100 && player.exp >= getExpReq(player.lv))',
+      `while(player.lv < ${C} && player.exp >= getExpReq(player.lv))`, 1, 'checkLvUp'],
+    ['js/06-status-allies.js', 'while ((ctx.source.lv || 1) < 100 && ctx.source.exp >= getExpReq(ctx.source.lv))',
+      `while ((ctx.source.lv || 1) < ${C} && ctx.source.exp >= getExpReq(ctx.source.lv))`, 1, '經驗分配·來源升級'],
+    ['js/06-status-allies.js', 'if ((ctx.source.lv || 1) >= 100) ctx.source.exp = 0;',
+      `if ((ctx.source.lv || 1) >= ${C}) ctx.source.exp = 0;`, 1, '經驗分配·來源滿等'],
+    ['js/06-status-allies.js', 'while ((player.lv || 1) < 100 && player.exp >= getExpReq(player.lv))',
+      `while ((player.lv || 1) < ${C} && player.exp >= getExpReq(player.lv))`, 1, '經驗分配·玩家升級'],
+    ['js/06-status-allies.js', 'if ((player.lv || 1) >= 100) player.exp = 0;',
+      `if ((player.lv || 1) >= ${C}) player.exp = 0;`, 1, '經驗分配·玩家滿等'],
+    ['js/08-items-equip.js', 'let pct = player.lv >= 100 ? 100 :',
+      `let pct = player.lv >= ${C} ? 100 :`, 1, '經驗條'],
+    ['js/28-pvp-arena.js', 'lv: Math.max(1, Math.min(100, Math.floor(Number(p.lv) || 1))),',
+      `lv: Math.max(1, Math.min(${C}, Math.floor(Number(p.lv) || 1))),`, 1, 'PvP 名片產生'],
+    ['js/28-pvp-arena.js', 'p.lv = Math.max(1, Math.min(100, Math.floor(Number(p.lv) || 1)));',
+      `p.lv = Math.max(1, Math.min(${C}, Math.floor(Number(p.lv) || 1)));`, 1, 'PvP 名片驗證'],
+    ['js/26-world-channel.js', '等級上限是 100，到頂之後經驗就不會再往上累積了。',
+      `等級上限是 ${C}，到頂之後經驗就不會再往上累積了。`, 1, '世界頻道 FAQ 文字'],
+  ];
+  const count = (s, sub) => s.split(sub).length - 1;
+  for (const [FILE, from, to, n, label] of SITES) {
+    let s = readFileSync(FILE, 'utf8');
+    if (count(s, to) === n) { already++; continue; }   // 冪等：改後的字串已在（getExpReq 那處 to 以 from 開頭，也靠這行判斷）
+    const got = count(s, from);
+    if (got !== n) throw new Error(`[${FILE}] 等級上限補丁「${label}」錨點應出現 ${n} 次、實際 ${got} 次：「${from.slice(0, 60)}…」——上游可能改寫了該段，請人工確認。`);
+    s = s.split(from).join(to);
+    if (!CHECK) writeFileSync(FILE, s);
+    changed++;
+    console.log(`[patch] 等級上限 ${LV_CAP} — ${label}（${FILE}）`);
+  }
+}
+
+const PATCHES = [patchMaybeSpawnMobs, patchTradEnHook, patch16Slots, patchPetAnimTicker, patchBossHuntEscape, patchUseItemKeepModal, patchSellNowNoForce, patchInsigniaOrder, patchGiltasWandRecompute, patchEyeSlotInEquipList, patchRelicAffixHook, patchIllusionSetWpnProc, patchLevelCap200];
 
 try {
   for (const p of PATCHES) p();

@@ -445,14 +445,14 @@ function _ffInventoryCounts() {
 
 // 經驗「總累積進度」（exp＋已升等級需求總和）：跨升級仍單調，前後差＝實得經驗（升級瞬間也算得對）
 function _ffExpProgress() {
-    let lv = Math.max(1, Math.min(100, Math.floor(Number(player.lv) || 1)));
+    let lv = Math.max(1, Math.min(200, Math.floor(Number(player.lv) || 1)));
     let total = Math.max(0, Number(player.exp) || 0);
     if (typeof getExpReq !== 'function') return total;
     for (let n = 1; n < lv; n++) { let r = Number(getExpReq(n)); if (Number.isFinite(r) && r > 0) total += r; }
     return total;
 }
 function _ffAllyProgress(a) {
-    let lv = Math.max(1, Math.min(100, Math.floor(Number(a.lv) || 1)));
+    let lv = Math.max(1, Math.min(200, Math.floor(Number(a.lv) || 1)));
     let total = Math.max(0, Number(a.exp) || 0);
     if (typeof getExpReq !== 'function') return total;
     for (let n = 1; n < lv; n++) { let r = Number(getExpReq(n)); if (Number.isFinite(r) && r > 0) total += r; }

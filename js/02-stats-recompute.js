@@ -46,7 +46,7 @@ function antHelperGuardReductionPercent(magicResistance) {
 }
 function recomputeStats() {
     let p = player, d = p.d, b = p.base, a = p.alloc;
-    if (typeof p.lv === 'number') p.lv = Math.max(1, Math.min(100, Math.floor(p.lv) || 1));   // 🛡️ 等級硬夾 [1,100]：即時中和「改 player.lv」的外掛，避免職業成長值被放大
+    if (typeof p.lv === 'number') p.lv = Math.max(1, Math.min(200, Math.floor(p.lv) || 1));   // 🛡️ 等級硬夾 [1,100]：即時中和「改 player.lv」的外掛，避免職業成長值被放大
 
     // 先把「上一輪由裝備授予的技能」從技能欄移除（卸下裝備時生效）；sk_helm_* 玩家無法學習，不會誤刪已學技能
     if (player.grantedSkills && player.grantedSkills.length) {

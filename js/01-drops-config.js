@@ -2126,7 +2126,7 @@ function blessEnhanceGain(en) {
 function sanitizeState() {
     if (typeof player !== 'object' || !player) return;
     let fin = (v, dft) => (typeof v === 'number' && isFinite(v)) ? v : dft;   // NaN/Infinity/非數 → 預設值
-    player.lv   = Math.max(1, Math.min(100, Math.floor(fin(player.lv, 1)) || 1));   // 等級 [1,100]
+    player.lv   = Math.max(1, Math.min(200, Math.floor(fin(player.lv, 1)) || 1));   // 等級 [1,100]
     player.exp  = Math.max(0, fin(player.exp, 0));                                   // 經驗非負有限
     player.gold = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, fin(player.gold, 0)));   // 金幣：僅擋負值/NaN/Infinity，不擋高額合法金幣
     let clampEn = it => { let dd = it && DB.items[it.id]; if (dd && (dd.type === 'wpn' || dd.type === 'arm' || dd.type === 'acc')) it.en = Math.min(Math.max(-1, Number(it.en) || 0), enhanceCap(dd)); };   // 只夾裝備類（素材/消耗品不碰）；🏰 下限 -1（詛咒卷軸紅變，見 executeCurseDeEnhance）

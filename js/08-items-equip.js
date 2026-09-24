@@ -1470,7 +1470,7 @@ function _updateUIImpl() {
     } }
     // 🏰 v3.7.96 城堡護衛 v2：改為隊伍面板實體 HP 卡（renderGuardTeamHTML·js/31）；舊「主狀態欄承擔傷害護衛條」已移除。
     let nxtE = getExpReq(player.lv);
-    let pct = player.lv >= 100 ? 100 : (nxtE > 0 && isFinite(nxtE) ? (player.exp / nxtE) * 100 : 0);
+    let pct = player.lv >= 200 ? 100 : (nxtE > 0 && isFinite(nxtE) ? (player.exp / nxtE) * 100 : 0);
     document.getElementById('txt-exp').innerText = `${pct.toFixed(2)}%`;
     document.getElementById('bar-exp').style.width = `${Math.min(100, pct)}%`;
     try { if (typeof renderSquadPanel === 'function') renderSquadPanel(); } catch (e) {}   // 🤝 協力傭兵隊伍面板：每幀同步血/魔/經驗條（名單變動才重建結構）

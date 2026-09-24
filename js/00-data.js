@@ -274,7 +274,7 @@ function _expReqClassicV2(lv) {   // v3.4.58 以前的經典表；僅供 expMigV
     if (lv >= 100) return Infinity;
     return EXP_REQ_CLASSIC_V2[lv] || Infinity;
 }
-function getExpReq(lv) {
+function getExpReq(lv) {   /* 🔌 加掛版補丁:Lv100~199 延伸 Lv70-99 公式 */ if (lv >= 100 && lv < 200) return (lv * lv + 1) * EXP_REQ_LV69_KILLS;
     if (lv >= 100) return Infinity;
     return EXP_REQ_CLASSIC[lv] || Infinity;
 }
@@ -294,7 +294,7 @@ function _expReqOldV1(lv) {
     if (lv >= 49)  return 36065092;
     return EXP_T[lv];
 }
-function getExpGainMult(lv) { return lv >= 100 ? 0 : 1; }   // ⚠️v2.6.40 取消高等經驗遞減（恆全額）；滿等(100)仍不獲得。遞減效果改由 getExpReq 提高需求承擔。
+function getExpGainMult(lv) { return lv >= 200 ? 0 : 1; }   // ⚠️v2.6.40 取消高等經驗遞減（恆全額）；滿等(100)仍不獲得。遞減效果改由 getExpReq 提高需求承擔。
 
 const DB = {
         items: {
