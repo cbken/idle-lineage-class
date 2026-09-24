@@ -66,6 +66,8 @@
     <script src="afk-ancdrop.js"></script>
     <!-- 重複的遺物會帶詞綴：遺物收集冊已收錄的那件，之後再打到的每一件各自 50% 擲祝福／遠古系／屬性（屬性只上武器遺物）。需核心補丁 11 的 __afkRelicAffix 鉤子 -->
     <script src="afk-relicaffix.js"></script>
+    <!-- 血盟敵人／玩家 NPC 噴裝依等級挑貨：只掉「裝備等級 ≥ 玩家等級−20」的東西（Lv100+ 當 99），取消上游普通貨×2；掉率不變。只攔 pledgeBonusDrop 的 getWeightedGachaResult(true) -->
+    <script src="afk-leveldrop.js"></script>
     <!-- 黑市收購價提示：收購欄下方即時顯示必中價/命中率/平均要等多久（遊戲只能靠掛單試）；也開 AFK_BM 給 afk-dex 的物品詳情標價 -->
     <script src="afk-bmprice.js"></script>
     <!-- 只迴避指定頭目：把上游「迴避頭目(瞬移卷軸)」的範圍從「全部的王」縮小到玩家挑的那幾隻（每張地圖各自一份） -->
