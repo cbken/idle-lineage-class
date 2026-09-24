@@ -466,7 +466,29 @@ function patchLevelCap200() {
   }
 }
 
-const PATCHES = [patchMaybeSpawnMobs, patchTradEnHook, patch16Slots, patchPetAnimTicker, patchBossHuntEscape, patchUseItemKeepModal, patchSellNowNoForce, patchInsigniaOrder, patchGiltasWandRecompute, patchEyeSlotInEquipList, patchRelicAffixHook, patchIllusionSetWpnProc, patchLevelCap200];
+// ── 補丁 14：魔物追蹤效期 8 小時 → 24 小時（js/11，2 處）──────────────────────
+//   站主 2026-09-25 拍板。效期寫死在 obel 購買函式的字面值，外掛包不到（包函式只能事後改 until，
+//   但那行 logSys 已印出「持續 8 小時」）。只影響新購買；已生效的追蹤維持原到期時間。費用不變。
+function patchTracking24h() {
+  const FILE = 'js/11-world-map.js';
+  const SITES = [
+    ['until: Date.now() + 8 * 3600 * 1000 };', 'until: Date.now() + 24 * 3600 * 1000 };   /* 🔌 加掛版補丁:追蹤效期 8→24 小時 */', '效期'],
+    ['</span>，持續 8 小時。`);', '</span>，持續 24 小時。`);', '訊息文字'],
+  ];
+  let s = readFileSync(FILE, 'utf8');
+  const count = (x, sub) => x.split(sub).length - 1;
+  for (const [from, to, label] of SITES) {
+    if (count(s, to) === 1) { already++; continue; }
+    const got = count(s, from);
+    if (got !== 1) throw new Error(`[${FILE}] 魔物追蹤補丁「${label}」錨點應出現 1 次、實際 ${got} 次：「${from}」——上游可能改寫了追蹤購買段，請人工確認。`);
+    s = s.replace(from, to);
+    changed++;
+    console.log(`[patch] 魔物追蹤 24 小時 — ${label}（${FILE}）`);
+  }
+  if (!CHECK) writeFileSync(FILE, s);
+}
+
+const PATCHES = [patchMaybeSpawnMobs, patchTradEnHook, patch16Slots, patchPetAnimTicker, patchBossHuntEscape, patchUseItemKeepModal, patchSellNowNoForce, patchInsigniaOrder, patchGiltasWandRecompute, patchEyeSlotInEquipList, patchRelicAffixHook, patchIllusionSetWpnProc, patchLevelCap200, patchTracking24h];
 
 try {
   for (const p of PATCHES) p();

@@ -878,10 +878,10 @@ function obelStartTracking() {
     const TRACKING_GOLD_COST = 100000;
     if ((player.gold || 0) < TRACKING_GOLD_COST) { alert(`金幣不足，追蹤需要 ${TRACKING_GOLD_COST.toLocaleString()} 金幣。`); return; }
     player.gold -= TRACKING_GOLD_COST;
-    player.tracking = { map: _obelSel.map, mob: _obelSel.mob, until: Date.now() + 8 * 3600 * 1000 };
+    player.tracking = { map: _obelSel.map, mob: _obelSel.mob, until: Date.now() + 24 * 3600 * 1000 };   /* 🔌 加掛版補丁:追蹤效期 8→24 小時 */
     _obelSel = { map: '', mob: '' };
     renderTabs(); saveGame();
-    logSys(`花費 ${TRACKING_GOLD_COST.toLocaleString()} 金幣，奧貝勒開始追蹤 <span class="text-amber-300 font-bold">${(DB.mobs[player.tracking.mob] || {}).n}</span>，持續 8 小時。`);
+    logSys(`花費 ${TRACKING_GOLD_COST.toLocaleString()} 金幣，奧貝勒開始追蹤 <span class="text-amber-300 font-bold">${(DB.mobs[player.tracking.mob] || {}).n}</span>，持續 24 小時。`);
     let el = document.getElementById('interaction-content'); if(el) renderObelNPC(el);
     updateUI();
 }
