@@ -1849,8 +1849,11 @@ function logCombat(msg, type="player", src=null) {
     // 🔒 鎖定捲動時保留更多歷史；未鎖定時維持一般上限
     let _max = _combatLogLocked ? COMBAT_LOG_MAX_LOCKED : COMBAT_LOG_MAX;
     while(el.children.length > _max && el.children.length > 1) el.removeChild(el.firstChild);
-    if(!_combatLogLocked) el.scrollTop = el.scrollHeight;   // 鎖定時不自動捲到底，保留玩家檢視位置
+    // 🚀 v3.10.0 加掛版：原本每寫一行就讀 scrollHeight（逼瀏覽器立刻重新排版），戰鬥中一秒 60 行＝一秒排版 60 次。
+    //    改成「這一幀結束前捲一次」，畫面看起來一樣，排版次數降到每幀最多一次。
+    if(!_combatLogLocked && !_combatLogScrollRaf) _combatLogScrollRaf = requestAnimationFrame(function(){ _combatLogScrollRaf = 0; if(_combatLogLocked) return; let e = document.getElementById('combat-log'); if(e) e.scrollTop = e.scrollHeight; });   // 鎖定時不自動捲到底，保留玩家檢視位置
 }
+let _combatLogScrollRaf = 0;
 
 // 🔒 系統與物品日誌捲動鎖定：與戰鬥日誌相同（向上捲動鎖定刷新、保留 150 行、捲回底部自動解除）
 let _sysLogLocked = false;

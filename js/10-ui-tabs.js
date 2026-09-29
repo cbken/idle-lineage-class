@@ -153,6 +153,13 @@ function renderClassicSkillBook(sDiv) {
         + '<div class="classic-skill-stat classic-skill-stat-mr">' + _mrv + '</div>'
         + '</div>';
 }
+// 🚀 v3.10.0：背包類分頁目前是否有任何一個看得見（renderTabs 只在看得見時重建）
+function _invTabVisible() {
+    return ['tab-equip','tab-weapons','tab-armors','tab-items','tab-skill'].some(function(id){ let e = document.getElementById(id); return !!(e && !e.classList.contains('hidden') && e.offsetParent !== null); });
+}
+// 🚀 v3.10.0 保險：分頁不一定都經過 switchTab 才變看得見（手機側欄滑出、外掛切頁、載入預設分頁…）→ 每 0.5 秒檢查一次，
+//    「髒了＋現在看得見」就補一次重建，避免看到舊背包。
+setInterval(function(){ try { if (renderTabs._dirty && !state.ff && _invTabVisible()) renderTabs(true); } catch (e) {} }, 500);
 function renderTabs(force) {
     if(state.ff || (typeof catchupActive === 'function' && catchupActive())) return; // 補跑全部完成前不刷新畫面
     // 🚀 使用者正按住分頁面板(點擊中)：延後非強制重建到放開後，避免按鈕被重繪掉而點擊失效
@@ -160,6 +167,10 @@ function renderTabs(force) {
     // 🚀 戰鬥 tick 內的高頻變動(扣箭/耗肉)：合併成一次重建(節流 250ms)，降低狩獵卡頓；使用者操作(非 tick)維持即時回饋
     if(!force && state.inTick) { if(!_tabThrottleTimer) _tabThrottleTimer = setTimeout(function(){ _tabThrottleTimer = null; renderTabs(); }, TAB_REBUILD_THROTTLE_MS); return; }
     if(_tabThrottleTimer) { clearTimeout(_tabThrottleTimer); _tabThrottleTimer = null; }
+    // 🚀 v3.10.0 加掛版（站主 i5-6500 全開動畫卡頓）：背包/武器/防具/裝備/技能分頁都沒打開時，不重建（1 萬多個元素、上千張小圖），
+    //    只記「髒了」；切到這些分頁時 switchTab 會補一次強制重建。實測：30 秒內重建 97 次、累計 1 秒，卡頓幀多半是它。
+    if(!_invTabVisible()) { renderTabs._dirty = true; return; }
+    renderTabs._dirty = false;
     // ===== 內容簽章：背包/裝備/技能等實際內容沒變時直接跳過重建 =====
     // 避免戰鬥中(掉寶、射箭扣箭、夥伴耗肉等)頻繁重繪，導致游標所在欄位閃動、捲動跳回頂端、以及 mousedown/mouseup 落在不同元素造成點擊失效。
     let _sig = (function(){
@@ -2540,6 +2551,7 @@ function switchTab(t, btn) {
     if(t === 'pvp' && typeof renderPvpTab === 'function') renderPvpTab();
     if(t === 'clan' && typeof renderClanTab === 'function') renderClanTab();
     if(t === 'automation' && typeof syncNpcLanguageSetting === 'function') syncNpcLanguageSetting();
+    if(['equip','weapons','armors','items','skill'].includes(t) && renderTabs._dirty) renderTabs(true);   // 🚀 v3.10.0 分頁沒開時延後的重建，切過來時補做
 }
 
 // ===== 🤝 協力傭兵隊伍面板（Phase 1：顯示血/魔/經驗條＋每傭兵攻擊技能/治癒魔法設定）=====
