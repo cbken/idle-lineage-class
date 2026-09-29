@@ -18,6 +18,8 @@
 
 ## 專案性質與架構（2026-07-19 起・純上游鏡像＋外掛層）
 
+> 🆕 **2026-09-29 站主拍板：原作者已停止開發，不再同步上游。** 以下「核心不准手改」的理由（會被同步蓋掉）已不成立；核心可以直接改。已有的錨點補丁／外掛照舊保留，新改動可視情況直接改核心（改了記得在 docs/plugins.md 或 commit 訊息寫清楚）。
+
 - 網頁放置遊戲。遊戲本體由原作者(巴哈姆特 秋玥)製作,原版:**https://shines871.github.io/idle-lineage-class/**;本站(加掛版):https://pp771007.github.io/idle-lineage-class/。
 - **架構=「上游原版鏡像＋外掛層」**:核心(`js/NN-*.js`、`css/*`、`index.html`、`assets/`、`public/`)永遠是上游原文/原檔的位元組級鏡像;我們的所有功能都在**外掛層**——根目錄 `afk-*.js`(70 支)＋`sw.js`(PWA,上游沒有)＋極少量**錨點式核心補丁**(`scripts/apply-core-patches.mjs`)。
 - 上游本機 clone:`D:/otherPersonRepos/idle-lineage-class`。**引用上游做任何判斷前先 `git -C <clone> fetch`**——舊 clone 會讓「上游也是這樣」的結論整個相反(踩過)。
