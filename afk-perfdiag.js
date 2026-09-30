@@ -155,7 +155,7 @@
   function showProgress() {
     var left = SECS;
     var p = document.createElement('div'); p.id = 'afk-pd-prog';
-    p.style.cssText = 'position:fixed;left:8px;bottom:44px;z-index:100002;background:#0f172a;color:#fcd34d;border:1px solid #334155;border-radius:8px;padding:6px 10px;font-size:13px;pointer-events:none';
+    p.style.cssText = 'position:fixed;left:8px;bottom:calc(var(--m-nav-h, 0px) + 44px);z-index:100002;background:#0f172a;color:#fcd34d;border:1px solid #334155;border-radius:8px;padding:6px 10px;font-size:13px;pointer-events:none';
     document.body.appendChild(p);
     var upd = function () { p.textContent = '🩺 效能檢測中… 請照平常玩法操作（剩 ' + left + ' 秒）'; left--; };
     upd(); progTimer = setInterval(upd, 1000);
@@ -196,7 +196,7 @@
     if (!enabled() || document.getElementById('afk-pd-btn')) return;
     var b = document.createElement('button');
     b.id = 'afk-pd-btn'; b.type = 'button'; b.textContent = '🩺'; b.title = '效能檢測（錄 30 秒，列出哪裡卡）';
-    b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:9999;width:30px;height:30px;border-radius:50%;border:1px solid #475569;background:rgba(15,23,42,.85);color:#fff;font-size:15px;line-height:1;cursor:pointer;opacity:.75';
+    b.style.cssText = 'position:fixed;left:8px;bottom:calc(var(--m-nav-h, 0px) + 8px + env(safe-area-inset-bottom, 0px));z-index:9999;width:30px;height:30px;border-radius:50%;border:1px solid #475569;background:rgba(15,23,42,.85);color:#fff;font-size:15px;line-height:1;cursor:pointer;opacity:.75';
     b.onclick = function () {
       if (running) return;
       // v3.11.0：不用 confirm（對話框會卡住畫面、被算成卡頓）；按鈕按下 1 秒後才開始錄
