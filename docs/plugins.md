@@ -23,7 +23,7 @@
 | 13 | js/00+01+02+03+05+06+08+26+28 | **等級上限 100→200**(站主 2026-09-24 拍板;玩家＋傭兵,17 處字面值＋js/26 世界頻道 FAQ「等級上限是 100」)。`getExpReq` Lv100~199 延伸原作 Lv70-99 公式 `(lv²+1)×EXP_REQ_LV69_KILLS`(Lv199 約 153 億;全用 Lv99 怪約 39 萬~156 萬隻/級);夾值(`sanitizeState`/recompute/PvP 名片)、升級迴圈(`checkLvUp`/傭兵/經驗結算)、經驗條、快轉進度同步改。**刻意不動**:寵物上限(仍 ≤min(100,玩家等級))、js/13 一次性經驗遷移、裂痕怪等級、js/27(index 未載入)。🚨 半套就出事:只放寬升級沒放寬夾值 → 讀檔砍回 100。每處錨點驗「恰好 N 次」,上游改寫過就 exit 1 |
 | 14 | js/11 | **魔物追蹤效期 8→24 小時**(站主 2026-09-25 拍板;購買函式的 `until` 字面值＋「持續 8 小時」訊息,2 處)。只影響新購買,已生效的追蹤照原到期;費用 10 萬不變 |
 
-## 外掛(76 支;載入順序見 `scripts/afk-plugin-block.html`)
+## 外掛(77 支;載入順序見 `scripts/afk-plugin-block.html`)
 
 | 檔案 | 功能 |
 |---|---|
@@ -93,6 +93,7 @@
 | `afk-diamondx.js` | **金幣換龍之鑽石**(站主 2026-09-30:10 億/顆、不限次數)。潘朵拉收購欄下方一列。**單向**(不提供鑽換金幣,避免收購者的鑽變成金幣來源通膨)。一致性比照 afk-dograce:先 pandoraAdjustSharedDiamonds(+n)→扣 player.gold→saveGame()===true,失敗兩邊退回。平衡研究:龍鑽原本唯一來源是在線龍鑽收購者;站主王族每小時約 1.2 億金幣 → 10 億≈掛 8 小時 |
 | `afk-changelog.js` | **版本更新內容**(站主 2026-09-29):登入頁 #login-version 下加「📜 更新內容」;每台裝置第一次載到新 GAME_VERSION 自動跳一次當版內容(localStorage afk_seen_ver)。CHANGELOG 陣列寫在檔內,**每次發版都要在最上面加一筆**,與 GAME_VERSION 不一致會 console.warn。發版流程見 docs/versioning.md |
 | `afk-perfdiag.js` | **🩺 效能檢測**(站主 2026-09-29,i5-6500 全開動畫卡、開發機重現不出來):左下角按鈕錄 30 秒 → rAF 幀數/卡頓、long-animation-frame(程式/排版/繪製細分＋來源檔)、暫時包住畫面函式量各區塊累計毫秒(量完若沒被別人再包就換回)、環境(瀏覽器/執行緒/螢幕/DPR/元素數/顯示模式)。結果可複製文字回報 |
+| `afk-glowlite.js` | **物品發光省效能**(站主 2026-09-30 🩺:121 個發光動畫、14fps)。發光類 class(legend/relic/bless/ancient…-glow、attr-glow-*5、c-sherine)的 `filter: drop-shadow` 呼吸動畫改 `steps(10,jump-none)`——filter 動畫無法合成、每幀重畫;改分段後重畫次數降八成以上,光照樣亮/照樣呼吸。relicSpark(transform/opacity)不動。開關關掉＝原版平滑(重整生效) |
 | `afk-locksafe.js` | 上鎖的裝備不會被潘朵拉的收購 NPC／遺物布告欄拿走。**上游漏判**:js/24 的 `_findMatches` 只比對 id/強化值/數量,沒看 `lock` → 背包裡上鎖那件會被直接交易掉(已重現:上鎖的亞連被金幣收購員收走、無任何警告)。這與核心自己在 js/04 寫的「鎖定件不列入,與全專案其他破壞性路徑一致」相反,故認定是漏掉不是設計。挑選邏輯在 IIFE 內拿不到,改包**全域入口**(performWanderingBuyerTrade / pandoraExchangeRelic ＋兩支畫面函式,畫面才不會先說可交、按下去又說沒有),執行期間把上鎖物品從 player.inv 暫時抽掉。🚨 還原要以「核心跑完後的 player.inv」為準重組(核心成交時是 `player.inv = filter(...)` 換新陣列):上鎖的一律留、沒上鎖的看核心有沒有拿走、核心新增的補最後——無腦還原舊陣列會讓剛賣掉的東西復活。⚠️ **`player` 是 `let player`(js/01)、不在 window 上**,寫 window.player 會整段安靜失效(wrapper 掛得好好的卻完全沒作用,踩過;同 anyclass 的 DB)。倉庫不處理:whDeposit 本來就擋下上鎖物品存入 |
 | `afk-sellguard.js` | 防手滑把裝備賣掉,兩道獨立開關(都預設開)。**玩家回報「手機上點兩下裝備東西會不見」的元凶,已重現**:核心 js/10 背包列點一下 → 230ms 後開物品視窗、點兩下才直接裝備;兩下慢一點或手指移動一點就不算 dblclick → **第一下先開窗、第二下落在窗上**,而窗裡「裝備」正下方就是「販賣／全部賣出」且兩顆都沒有二次確認 → 當場賣掉。實測 Pixel 7 版面兩下間隔 350ms,背包第 7 列(cy 656)剛好壓在販賣鈕(y 637.5~679.5)上,日誌出現「賣出了 1 個 保護者斗篷」。中不中看那列落在哪個高度 → 一整套只掉一兩件,像「偶爾不見」。⚠️ **本職不能穿的裝備最危險**:雙擊完全沒反應(窗裡是灰掉的「無法裝備」),玩家會多點幾下。① `modalguard` 包 `openModal` 記時間戳,視窗開啟後 450ms 內落在 `#item-modal` 的 click 在 **document 的 capture 階段**吞掉(核心的鈕是 inline onclick＝掛在鈕自己身上的 bubble 監聽,不在 capture 攔就攔不到);450 的來歷=單擊延遲 230ms＋人看到窗才按下去 ≥300ms。② `sellconfirm` 包 `sellItem`,有強化值/祝福/遠古/屬性/套裝/傳說/遺物才問(判準對齊 js/10 `_autoSellDecision` 的保護項),白板 +0 不問——那才是玩家真的在清背包的東西。排在 afk-cursebatch 之後(它也包 openModal,我方後包＝最外層) |
 | `afk-traditional.js` | 傳統模式(偽)/自動衝裝(掉落自帶強化值;靠補丁2 的 `__afkTradRollEn` 鉤子) |
