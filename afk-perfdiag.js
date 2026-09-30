@@ -44,6 +44,25 @@
   ];
   var running = false;
 
+  // v3.11.1：GPU 有沒有在用（WebGL 的繪圖器名稱；SwiftShader／Basic Render＝Chrome 沒用顯示卡，全靠 CPU 畫）
+  function gpuInfo() {
+    try {
+      var c = document.createElement('canvas'), gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+      if (!gl) return { name: '無法取得（WebGL 不可用）', soft: true };
+      var ext = gl.getExtension('WEBGL_debug_renderer_info');
+      var name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      var soft = /swiftshader|basic render|llvmpipe|software|microsoft basic/i.test(String(name));
+      return { name: String(name).replace(/ANGLE \(|\)$/g, '').slice(0, 80), soft: soft };
+    } catch (e) { return { name: '檢查失敗', soft: false }; }
+  }
+  function animBreakdown() {
+    try {
+      var m = {}; (document.getAnimations ? document.getAnimations() : []).forEach(function (a) {
+        var t = a.effect && a.effect.target; var k = (a.animationName || (a.transitionProperty ? 'transition:' + a.transitionProperty : 'js動畫')) + (t ? '@' + (t.id || String(t.className || t.tagName).split(' ')[0]) : '');
+        m[k] = (m[k] || 0) + 1; });
+      return Object.keys(m).map(function (k) { return [k, m[k]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 6).map(function (x) { return x[0] + '×' + x[1]; }).join('、');
+    } catch (e) { return ''; }
+  }
   function envInfo() {
     var tm = null, vfx = null; try { tm = localStorage.getItem('afk_tm_mode'); vfx = localStorage.getItem('lineage_vfx_off'); } catch (e) {}
     var ua = navigator.userAgent, m = ua.match(/(Edg|Chrome|Firefox|Version)\/([\d.]+)/);
@@ -58,7 +77,8 @@
       mode: tm === 'text' ? '文字版' : tm === 'log' ? '只留日誌' : '完整版',
       vfx: vfx === '1' ? '關' : '開',
       map: (typeof mapState !== 'undefined' && mapState) ? mapState.current : '?',
-      allies: (typeof player !== 'undefined' && player && player.allies) ? player.allies.filter(Boolean).length : '?'
+      allies: (typeof player !== 'undefined' && player && player.allies) ? player.allies.filter(Boolean).length : '?',
+      gpu: gpuInfo(), animTop: animBreakdown()
     };
   }
 
@@ -147,6 +167,8 @@
     L.push('🩺 效能檢測 ' + new Date().toLocaleString('zh-TW', { hour12: false }) + '（' + r.secs.toFixed(0) + ' 秒）');
     L.push('環境：' + e.browser + '｜CPU 執行緒 ' + e.cores + '｜螢幕 ' + e.screen + '｜視窗 ' + e.win + '｜縮放 ' + e.dpr + '｜元素 ' + e.nodes + '｜動畫 ' + e.anims);
     L.push('設定：' + e.mode + '｜戰鬥特效 ' + e.vfx + '｜地圖 ' + e.map + '｜傭兵 ' + e.allies);
+    L.push('顯示卡：' + e.gpu.name + (e.gpu.soft ? '　⚠️ Chrome 沒有用到顯示卡（硬體加速可能被關掉）' : '　✅ 有用到顯示卡'));
+    if (e.animTop) L.push('動畫最多的：' + e.animTop);
     L.push('幀數 ' + r.fps.toFixed(1) + ' fps｜卡頓 >50ms ' + r.stutter50 + ' 次、>100ms ' + r.stutter100 + ' 次｜最長一幀 ' + f0(r.maxGap) + 'ms');
     if (r.loaf.ok) L.push('卡頓幀合計 ' + f0(r.loaf.total) + 'ms（程式 ' + f0(r.loaf.script) + '／排版樣式 ' + f0(r.loaf.layout) + '／繪製 ' + f0(r.loaf.render) + '），共 ' + r.loaf.n + ' 幀');
     else L.push('長任務 ' + r.lt.n + ' 次、共 ' + f0(r.lt.total) + 'ms（此瀏覽器不支援細分）');
