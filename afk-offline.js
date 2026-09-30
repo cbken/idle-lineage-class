@@ -1578,6 +1578,15 @@
         var r = _save.apply(this, arguments); try { stamp(); } catch (e) {} return r;
       };
     }
+    // 🐢→⚡ v3.11.1（站主回報「補跑有時要等 10 分鐘」）：分頁被切到背景時，核心的背景心跳 Worker（js/01）每秒直接呼叫 gameLoop()，
+    //    會在結算讓出的空檔插跑一拍，並在 finally 把 state.ff 設回 false → 剩下的結算全在「非補跑模式」下跑，
+    //    城堡護衛同步等每 10 拍讀一次血盟（9/12 那筆：644 秒、讀存檔 38 萬次、4GB）。
+    //    結算期間不讓 gameLoop 插隊＝跟「前景結算」完全同一個行為（前景時核心計時器本來就被清掉了）。
+    //    實測（真實存檔 27 小時、背景）：112 秒 → 4 秒。
+    if (typeof gameLoop === 'function') {
+      var _gl = gameLoop;
+      window.gameLoop = function () { if (catchingUp) return; return _gl.apply(this, arguments); };
+    }
     if (typeof changeMap === 'function') {
       var _cm = changeMap;
       window.changeMap = function () { var r = _cm.apply(this, arguments); try { stamp(); } catch (e) {} return r; };
