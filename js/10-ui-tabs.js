@@ -1,5 +1,5 @@
 let _tabPointerDown = false, _tabWheelActive = false, _tabWheelTimer = null, _tabRebuildPending = false, _tabThrottleTimer = null;
-const TAB_REBUILD_THROTTLE_MS = 250;
+const TAB_REBUILD_THROTTLE_MS = 1000;   // 🚀 v3.11.0 加掛版：250→1000（戰鬥中背包開著時一秒重建 3~4 次，i5 每次 33ms；背包晚零點幾秒更新看不出來）
 const TAB_WHEEL_IDLE_MS = 180;
 const CLASSIC_GRID_COLUMNS = 4;
 const CLASSIC_GRID_ROWS = 6;
@@ -153,13 +153,15 @@ function renderClassicSkillBook(sDiv) {
         + '<div class="classic-skill-stat classic-skill-stat-mr">' + _mrv + '</div>'
         + '</div>';
 }
+// 🚀 v3.11.0：單一分頁是否看得見
+function _tabVis(id) { let e = document.getElementById(id); return !!(e && !e.classList.contains('hidden') && e.offsetParent !== null); }
 // 🚀 v3.10.0：背包類分頁目前是否有任何一個看得見（renderTabs 只在看得見時重建）
 function _invTabVisible() {
     return ['tab-equip','tab-weapons','tab-armors','tab-items','tab-skill'].some(function(id){ let e = document.getElementById(id); return !!(e && !e.classList.contains('hidden') && e.offsetParent !== null); });
 }
 // 🚀 v3.10.0 保險：分頁不一定都經過 switchTab 才變看得見（手機側欄滑出、外掛切頁、載入預設分頁…）→ 每 0.5 秒檢查一次，
 //    「髒了＋現在看得見」就補一次重建，避免看到舊背包。
-setInterval(function(){ try { if (renderTabs._dirty && !state.ff && _invTabVisible()) renderTabs(true); } catch (e) {} }, 500);
+setInterval(function(){ try { if (state.ff) return; let st = renderTabs._stale || {}; if ((renderTabs._dirty && _invTabVisible()) || ['tab-weapons','tab-armors','tab-items'].some(function(id){ return st[id] && _tabVis(id); })) renderTabs(true); } catch (e) {} }, 500);   // v3.11.0：也補「延後重建的單一分頁」
 function renderTabs(force) {
     if(state.ff || (typeof catchupActive === 'function' && catchupActive())) return; // 補跑全部完成前不刷新畫面
     // 🚀 使用者正按住分頁面板(點擊中)：延後非強制重建到放開後，避免按鈕被重繪掉而點擊失效
@@ -275,18 +277,22 @@ function renderTabs(force) {
     });
     
     // 👇 清空新的三個面板
-    let wDiv = document.getElementById('tab-weapons'); wDiv.innerHTML = '';
-    let aDiv = document.getElementById('tab-armors'); aDiv.innerHTML = '';
-    let iDiv = document.getElementById('tab-items'); iDiv.innerHTML = '';
+    // 🚀 v3.11.0 加掛版：武器/防具/道具三頁只重建「看得見的那頁」（每頁上千格），看不見的記在 _stale，切過去（switchTab／0.5 秒 watcher）再補。
+    let _visW = _tabVis('tab-weapons'), _visA = _tabVis('tab-armors'), _visI = _tabVis('tab-items');
+    renderTabs._stale = { 'tab-weapons': !_visW, 'tab-armors': !_visA, 'tab-items': !_visI };
+    let wDiv = document.getElementById('tab-weapons'); if (_visW) wDiv.innerHTML = '';
+    let aDiv = document.getElementById('tab-armors'); if (_visA) aDiv.innerHTML = '';
+    let iDiv = document.getElementById('tab-items'); if (_visI) iDiv.innerHTML = '';
 
     // ⚡🗑️ 快速操作頭部：武器/防具分頁＝[快速強化][快速廢品]；道具分頁＝[快速廢品]
-    wDiv.appendChild(buildQuickHeader('wpn'));
-    aDiv.appendChild(buildQuickHeader('arm'));
-    iDiv.appendChild(buildQuickHeader('item'));
+    if (_visW) wDiv.appendChild(buildQuickHeader('wpn'));
+    if (_visA) aDiv.appendChild(buildQuickHeader('arm'));
+    if (_visI) iDiv.appendChild(buildQuickHeader('item'));
 
 player.inv.forEach(i => {
     if(!DB.items[i.id]) return;
     let d = DB.items[i.id];
+    if (!(d.type === 'wpn' ? _visW : (d.type === 'arm' || d.type === 'acc') ? _visA : _visI)) return;   // 🚀 v3.11.0 目標分頁看不見→略過（分流規則與下方「物品分流邏輯」一致）
 
     // ===== 視覺狀態判定 =====
     let statusTag = '';
@@ -381,7 +387,7 @@ player.inv.forEach(i => {
     }
 });
     // 🎨 v3.0.40 1.8 物品介面：保留原清單事件與功能，只把內容搬入八格皮膚的可捲動區。
-    [eDiv,wDiv,aDiv,iDiv].forEach(decorateClassicInventoryTab);
+    [eDiv].concat(_visW ? [wDiv] : [], _visA ? [aDiv] : [], _visI ? [iDiv] : []).forEach(decorateClassicInventoryTab);   // 🚀 v3.11.0 只裝飾有重建的頁
 
     // 🎨 技能欄使用新版 4×6 皮膚（技能欄位.png·tier strip 導覽·底部 S.power=魔法傷害/M.resist=MR）。
     //    取代原「依學習來源分組 ICON」排版；仍走 data-tip-skill tooltip、manualCast、updateSummonLock。
@@ -2551,7 +2557,7 @@ function switchTab(t, btn) {
     if(t === 'pvp' && typeof renderPvpTab === 'function') renderPvpTab();
     if(t === 'clan' && typeof renderClanTab === 'function') renderClanTab();
     if(t === 'automation' && typeof syncNpcLanguageSetting === 'function') syncNpcLanguageSetting();
-    if(['equip','weapons','armors','items','skill'].includes(t) && renderTabs._dirty) renderTabs(true);   // 🚀 v3.10.0 分頁沒開時延後的重建，切過來時補做
+    if(['equip','weapons','armors','items','skill'].includes(t) && (renderTabs._dirty || (renderTabs._stale && renderTabs._stale['tab-' + t]))) renderTabs(true);   // 🚀 v3.10.0 分頁沒開時延後的重建，切過來時補做
 }
 
 // ===== 🤝 協力傭兵隊伍面板（Phase 1：顯示血/魔/經驗條＋每傭兵攻擊技能/治癒魔法設定）=====

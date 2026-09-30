@@ -22,7 +22,7 @@
   });
   function enabled() { return !window.AFK_TOGGLES || AFK_TOGGLES.enabled('perfdiag'); }
 
-  var SECS = 30;
+  var SECS = 30;   // 按鈕按下後 1 秒開始、錄 30 秒
   // [顯示名稱, 全域函式名]；缺的會自動略過
   var TARGETS = [
     ['戰鬥主迴圈（含全部）', 'tick'],
@@ -73,6 +73,7 @@
     try {
       var o1 = new PerformanceObserver(function (l) {
         l.getEntries().forEach(function (e) {
+          if (e.startTime < t0) return;   // v3.11.0：排除按下按鈕那一幀（含確認框的等待時間，第一版誤算進 5.9 秒）
           loaf.n++; loaf.total += e.duration;
           var sl = e.styleAndLayoutStart ? (e.startTime + e.duration - e.styleAndLayoutStart) : 0;
           var rs = e.renderStart ? (e.startTime + e.duration - e.renderStart) : 0;
@@ -87,7 +88,7 @@
       });
       o1.observe({ type: 'long-animation-frame', buffered: false }); obs.push(o1); loaf.ok = true;
     } catch (e) { loaf.ok = false; }
-    try { var o2 = new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { lt.n++; lt.total += e.duration; }); }); o2.observe({ type: 'longtask', buffered: false }); obs.push(o2); } catch (e) {}
+    try { var o2 = new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { if (e.startTime < t0) return; lt.n++; lt.total += e.duration; }); }); o2.observe({ type: 'longtask', buffered: false }); obs.push(o2); } catch (e) {}
 
     // ③ 包住畫面函式（量完原樣換回）
     var acc = {}, wrapped = [];
@@ -176,8 +177,8 @@
     b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:9999;width:30px;height:30px;border-radius:50%;border:1px solid #475569;background:rgba(15,23,42,.85);color:#fff;font-size:15px;line-height:1;cursor:pointer;opacity:.75';
     b.onclick = function () {
       if (running) return;
-      if (!confirm('開始效能檢測？\n接下來 30 秒請照平常的玩法（動畫全開、正在打怪），檢測完會跳出結果。')) return;
-      run();
+      // v3.11.0：不用 confirm（對話框會卡住畫面、被算成卡頓）；按鈕按下 1 秒後才開始錄
+      setTimeout(function () { run(); }, 1000);
     };
     document.body.appendChild(b);
   }
