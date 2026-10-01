@@ -280,6 +280,7 @@ function renderTabs(force) {
     // 🚀 v3.11.0 加掛版：武器/防具/道具三頁只重建「看得見的那頁」（每頁上千格），看不見的記在 _stale，切過去（switchTab／0.5 秒 watcher）再補。
     let _visW = _tabVis('tab-weapons'), _visA = _tabVis('tab-armors'), _visI = _tabVis('tab-items');
     renderTabs._stale = { 'tab-weapons': !_visW, 'tab-armors': !_visA, 'tab-items': !_visI };
+    if (!renderTabs._rowCache) renderTabs._rowCache = new WeakMap();   // 🚀 v3.11.4 物品物件 → {字串鍵, 元素}（物品被丟掉就自動回收）
     let wDiv = document.getElementById('tab-weapons'); if (_visW) wDiv.innerHTML = '';
     let aDiv = document.getElementById('tab-armors'); if (_visA) aDiv.innerHTML = '';
     let iDiv = document.getElementById('tab-items'); if (_visI) iDiv.innerHTML = '';
@@ -325,12 +326,10 @@ player.inv.forEach(i => {
 }
 
     // ===== 渲染物品 =====
-    let el = document.createElement('div'); 
-    // className 這裡移除了 isDisabled 相關的判定，讓所有項目都可以互動
-    el.className = `list-item tip-host text-base ${itemBg} rounded mb-1 ${i.lock ? 'border-red-900 border-2' : ''}`;
-    el.setAttribute('data-tip-uid', i.uid); el.setAttribute('data-tip-src', 'inv');   // 🖱️ hover 即時顯示完整物品資訊 tooltip（同技能·取代原生 title 慢速提示）
-    if (i.lock) el.classList.add('classic-item-locked');
-    else if (i.junk) el.classList.add('classic-item-junk');
+    // 🚀 v3.11.4 加掛版（站主筆電：每次重建 51ms、點背包就卡）：先把這一列的「類別、內容、點擊模式」算成字串，
+    //    跟上一輪同一件物品（同一個物件）的字串一模一樣就直接沿用舊的那個元素（不再重新解析 HTML、重新綁事件），
+    //    只有內容真的變了的那幾格才重建。事件裡用到的 i 是同一個物件，所以沿用是安全的。
+    let _cls = `list-item tip-host text-base ${itemBg} rounded mb-1 ${i.lock ? 'border-red-900 border-2' : ''}` + (i.lock ? ' classic-item-locked' : (i.junk ? ' classic-item-junk' : ''));
     
     // 判斷如果背包裡的物品是祝福的，套用螢光特效
     let imgUrl = getIconUrl(d);
@@ -347,18 +346,37 @@ player.inv.forEach(i => {
     // ⚡ 快速強化模式：對應分頁啟用且為可強化裝備（未鎖定）時，右側顯示勾選欄，點整列切換勾選
     let _qeType = (d.type === 'wpn' && !d.isArrow) ? 'wpn' : ((d.type === 'arm' || d.type === 'acc') ? 'arm' : null);
     let _qjType = (d.type === 'wpn') ? 'wpn' : ((d.type === 'arm' || d.type === 'acc') ? 'arm' : 'item');   // 🗑️ 快速廢品分頁歸屬（含箭矢→武器分頁、其餘→道具分頁）
+    let _mode, _html;
     if (_qeType && quickEnh[_qeType].active && _qeCanSelect(d, i, _qeType)) {   // ⚡ v3.5.87 改用與執行端 _qeEligibleItems 同一 predicate：noEnhance 等不合格物品不再顯示可勾（改走下方一般列分支）
         let _checked = !!quickEnh[_qeType].sel[i.uid];
-        el.innerHTML = `<div class="flex items-center justify-between gap-2">${_rowInner}<input type="checkbox" class="pointer-events-none w-4 h-4 mr-1 flex-shrink-0" ${_checked ? 'checked' : ''}></div>`;
-        if (_checked) el.className += ' ring-2 ring-blue-500/70';
-        el.onclick = () => toggleQuickItem(_qeType, i.uid);
+        _mode = 'qe:' + _qeType;
+        _html = `<div class="flex items-center justify-between gap-2">${_rowInner}<input type="checkbox" class="pointer-events-none w-4 h-4 mr-1 flex-shrink-0" ${_checked ? 'checked' : ''}></div>`;
+        if (_checked) _cls += ' ring-2 ring-blue-500/70';
     } else if (quickJunk[_qjType].active && _qjCanSelect(d, i, _qjType)) {   // 🗑️ v3.5.87 同上：noJunk 物品不再顯示可勾
         let _checked = !!quickJunk[_qjType].sel[i.uid];
-        el.innerHTML = `<div class="flex items-center justify-between gap-2">${_rowInner}<input type="checkbox" class="pointer-events-none w-4 h-4 mr-1 flex-shrink-0" ${_checked ? 'checked' : ''}></div>`;
-        if (_checked) el.className += ' ring-2 ring-amber-500/70';
+        _mode = 'qj:' + _qjType;
+        _html = `<div class="flex items-center justify-between gap-2">${_rowInner}<input type="checkbox" class="pointer-events-none w-4 h-4 mr-1 flex-shrink-0" ${_checked ? 'checked' : ''}></div>`;
+        if (_checked) _cls += ' ring-2 ring-amber-500/70';
+    } else {
+        _mode = 'n';
+        _html = _rowInner;
+    }
+    let _rowKey = _mode + '\u0001' + _cls + '\u0001' + _html;
+    let _cached = renderTabs._rowCache.get(i);
+    let el;
+    if (_cached && _cached.key === _rowKey) {
+        el = _cached.el;
+        if (el.style.display) el.style.display = '';   // 名稱搜尋（afk-itemsearch）可能把舊列藏起來過；沒在搜尋時新列應該全看得見
+    } else {
+    el = document.createElement('div'); 
+    el.className = _cls;
+    el.setAttribute('data-tip-uid', i.uid); el.setAttribute('data-tip-src', 'inv');   // 🖱️ hover 即時顯示完整物品資訊 tooltip（同技能·取代原生 title 慢速提示）
+    el.innerHTML = _html;
+    if (_mode.indexOf('qe:') === 0) {
+        el.onclick = () => toggleQuickItem(_qeType, i.uid);
+    } else if (_mode.indexOf('qj:') === 0) {
         el.onclick = () => toggleQuickJunkItem(_qjType, i.uid);
     } else {
-        el.innerHTML = _rowInner;
         // 🖱️ v3.0.38 雙擊快速操作（用戶要求）：可使用型道具（藥水/卷軸/技能書/有效果的 misc）雙擊直接使用、
         //    裝備（武器/防具/飾品）雙擊直接裝備（equipItem 內建 checkCanEquip 職業判定）。
         //    單擊延遲 230ms 才開 Modal（雙擊時取消·同 js/19 裝備視窗側欄 clickTimer 模式）；回憶蠟燭維持單擊進配點重置（排除雙擊使用）。
@@ -375,6 +393,8 @@ player.inv.forEach(i => {
             // 保留點擊開啟 Modal 功能 (所有項目皆可點擊)
             el.onclick = () => openModal(i, false);
         }
+    }
+    renderTabs._rowCache.set(i, { key: _rowKey, el: el });
     }
     
     // 🎯 物品分流邏輯
