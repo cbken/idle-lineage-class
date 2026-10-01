@@ -153,6 +153,59 @@ function renderClassicSkillBook(sDiv) {
         + '<div class="classic-skill-stat classic-skill-stat-mr">' + _mrv + '</div>'
         + '</div>';
 }
+// 🎒 v3.12.0 加掛版：背包一列的外觀規格（從 renderTabs 迴圈抽出，舊背包與新背包 afk-bag 共用，規則只有一份）
+//    回傳 { dst:'w'|'a'|'i'（武器/防具飾品/道具分頁）, cls（列的 class）, inner（列的內容 HTML） }
+function invRowSpec(i, d) {
+    d = d || DB.items[i.id];
+    // ===== 視覺狀態判定 =====
+    let statusTag = '';
+    let itemBg = 'bg-slate-800'; // 預設背景
+    let dimIcon = false; // 🔅 無法裝備（職業/負重不符）時，圖示黯淡化
+
+    if (d.type === 'skillbk') {
+        let sk = DB.skills[d.sk];
+        // 檢查該技能是否屬於該職業可學習範圍
+        let isClsPossible = skillReqLv(sk, d.sk) !== undefined;   // 🏅 集中化：含魔導精通特例
+        
+        if (player.skills.includes(d.sk)) {
+            statusTag = '<span class="text-slate-500 text-[10px] font-bold">[已學習]</span>';
+            itemBg = 'bg-slate-900 opacity-70'; // 已學習變暗
+        } else if (!isClsPossible) {
+            statusTag = '<span class="text-red-500 text-[10px] font-bold">[無法學習]</span>';
+            itemBg = 'bg-red-950/40'; // 職業不符顯示暗紅色底
+        }
+    } 
+    // 2. 裝備職業穿著判定 (修正版)
+    else if (d.type === 'wpn' || d.type === 'arm' || d.type === 'acc') {
+    // 👇 呼叫我們剛剛定義的共用判定函數，這樣就完美支援「負重強化」了！
+    let canEquip = checkCanEquip(i);
+    
+    if (!canEquip) {
+        statusTag = '<span class="text-red-500 text-[10px] font-bold">[無法裝備]</span>';
+        itemBg = 'bg-red-950/40'; // 職業/技能不符，顯示暗紅色底
+        dimIcon = true; // 🔅 圖示黯淡化
+    }
+}
+
+    // ===== 渲染物品 =====
+    // 🚀 v3.11.4 加掛版（站主筆電：每次重建 51ms、點背包就卡）：先把這一列的「類別、內容、點擊模式」算成字串，
+    //    跟上一輪同一件物品（同一個物件）的字串一模一樣就直接沿用舊的那個元素（不再重新解析 HTML、重新綁事件），
+    //    只有內容真的變了的那幾格才重建。事件裡用到的 i 是同一個物件，所以沿用是安全的。
+    let cls = `list-item tip-host text-base ${itemBg} rounded mb-1 ${i.lock ? 'border-red-900 border-2' : ''}` + (i.lock ? ' classic-item-locked' : (i.junk ? ' classic-item-junk' : ''));
+    
+    // 判斷如果背包裡的物品是祝福的，套用螢光特效
+    let imgUrl = getIconUrl(d);
+    let glowClass = getGlowClass(i, d);
+    let _dimStyle = dimIcon ? ' style="opacity:0.3;filter:grayscale(0.6);"' : '';   // 🔅 無法裝備→圖示黯淡＋去彩度
+    let imgHtml = `<img src="${imgUrl}" onerror="this.style.opacity='0';" class="w-6 h-6 object-contain pointer-events-none ${glowClass}"${_dimStyle}>`;
+    let _invCornerValue = (Number(i.en) || 0) > 0
+        ? `<span class="classic-icon-corner-value is-enhance">+${capEn(i.en, d)}</span>`
+        : ((i.cnt || 1) > 1 ? `<span class="classic-icon-corner-value is-count">${(i.cnt || 1).toLocaleString()}</span>` : '');
+    
+    // 內容組合 (加入了 statusTag)
+    let inner = `<div class="classic-item-main"><div class="classic-icon-box">${imgHtml}${_invCornerValue}</div><div class="classic-name-box"><span class="${getItemColor(i)} font-bold">${getItemFullName(i)}</span><span class="classic-item-flags">${statusTag}</span></div>${i.lock ? '<span class="classic-item-lock-badge" aria-hidden="true">🔒</span>' : ''}${(i.junk && !i.lock) ? '<span class="classic-item-junk-label">廢品</span>' : ''}</div>`;   // 方格狀態：上鎖右上角；廢品灰階＋底部紅字
+    return { dst: d.type === 'wpn' ? 'w' : ((d.type === 'arm' || d.type === 'acc') ? 'a' : 'i'), cls: cls, inner: inner };
+}
 // 🚀 v3.11.0：單一分頁是否看得見
 function _tabVis(id) { let e = document.getElementById(id); return !!(e && !e.classList.contains('hidden') && e.offsetParent !== null); }
 // 🚀 v3.10.0：背包類分頁目前是否有任何一個看得見（renderTabs 只在看得見時重建）
@@ -280,7 +333,9 @@ function renderTabs(force) {
     // 🚀 v3.11.0 加掛版：武器/防具/道具三頁只重建「看得見的那頁」（每頁上千格），看不見的記在 _stale，切過去（switchTab／0.5 秒 watcher）再補。
     let _visW = _tabVis('tab-weapons'), _visA = _tabVis('tab-armors'), _visI = _tabVis('tab-items');
     renderTabs._stale = { 'tab-weapons': !_visW, 'tab-armors': !_visA, 'tab-items': !_visI };
-    if (!renderTabs._rowCache) renderTabs._rowCache = new WeakMap();   // 🚀 v3.11.4 物品物件 → {字串鍵, 元素}（物品被丟掉就自動回收）
+    if (!renderTabs._rowCache) renderTabs._rowCache = new WeakMap();
+    // 🎒 v3.12.0 加掛版：新背包（afk-bag）接手看得見的武器/防具/道具頁（只畫看得到的格子、操作列不重建）；關掉＝走下面的舊背包
+    if (window.AFK_BAG && AFK_BAG.on() && AFK_BAG.render({ w: _visW, a: _visA, i: _visI })) { renderTabs._stale = { 'tab-weapons': !_visW, 'tab-armors': !_visA, 'tab-items': !_visI }; _visW = _visA = _visI = false; }   // 🚀 v3.11.4 物品物件 → {字串鍵, 元素}（物品被丟掉就自動回收）
     let wDiv = document.getElementById('tab-weapons'); if (_visW) wDiv.innerHTML = '';
     let aDiv = document.getElementById('tab-armors'); if (_visA) aDiv.innerHTML = '';
     let iDiv = document.getElementById('tab-items'); if (_visI) iDiv.innerHTML = '';
@@ -295,53 +350,9 @@ player.inv.forEach(i => {
     let d = DB.items[i.id];
     if (!(d.type === 'wpn' ? _visW : (d.type === 'arm' || d.type === 'acc') ? _visA : _visI)) return;   // 🚀 v3.11.0 目標分頁看不見→略過（分流規則與下方「物品分流邏輯」一致）
 
-    // ===== 視覺狀態判定 =====
-    let statusTag = '';
-    let itemBg = 'bg-slate-800'; // 預設背景
-    let dimIcon = false; // 🔅 無法裝備（職業/負重不符）時，圖示黯淡化
-
-    if (d.type === 'skillbk') {
-        let sk = DB.skills[d.sk];
-        // 檢查該技能是否屬於該職業可學習範圍
-        let isClsPossible = skillReqLv(sk, d.sk) !== undefined;   // 🏅 集中化：含魔導精通特例
-        
-        if (player.skills.includes(d.sk)) {
-            statusTag = '<span class="text-slate-500 text-[10px] font-bold">[已學習]</span>';
-            itemBg = 'bg-slate-900 opacity-70'; // 已學習變暗
-        } else if (!isClsPossible) {
-            statusTag = '<span class="text-red-500 text-[10px] font-bold">[無法學習]</span>';
-            itemBg = 'bg-red-950/40'; // 職業不符顯示暗紅色底
-        }
-    } 
-    // 2. 裝備職業穿著判定 (修正版)
-    else if (d.type === 'wpn' || d.type === 'arm' || d.type === 'acc') {
-    // 👇 呼叫我們剛剛定義的共用判定函數，這樣就完美支援「負重強化」了！
-    let canEquip = checkCanEquip(i);
-    
-    if (!canEquip) {
-        statusTag = '<span class="text-red-500 text-[10px] font-bold">[無法裝備]</span>';
-        itemBg = 'bg-red-950/40'; // 職業/技能不符，顯示暗紅色底
-        dimIcon = true; // 🔅 圖示黯淡化
-    }
-}
-
-    // ===== 渲染物品 =====
-    // 🚀 v3.11.4 加掛版（站主筆電：每次重建 51ms、點背包就卡）：先把這一列的「類別、內容、點擊模式」算成字串，
-    //    跟上一輪同一件物品（同一個物件）的字串一模一樣就直接沿用舊的那個元素（不再重新解析 HTML、重新綁事件），
-    //    只有內容真的變了的那幾格才重建。事件裡用到的 i 是同一個物件，所以沿用是安全的。
-    let _cls = `list-item tip-host text-base ${itemBg} rounded mb-1 ${i.lock ? 'border-red-900 border-2' : ''}` + (i.lock ? ' classic-item-locked' : (i.junk ? ' classic-item-junk' : ''));
-    
-    // 判斷如果背包裡的物品是祝福的，套用螢光特效
-    let imgUrl = getIconUrl(d);
-    let glowClass = getGlowClass(i, d);
-    let _dimStyle = dimIcon ? ' style="opacity:0.3;filter:grayscale(0.6);"' : '';   // 🔅 無法裝備→圖示黯淡＋去彩度
-    let imgHtml = `<img src="${imgUrl}" onerror="this.style.opacity='0';" class="w-6 h-6 object-contain pointer-events-none ${glowClass}"${_dimStyle}>`;
-    let _invCornerValue = (Number(i.en) || 0) > 0
-        ? `<span class="classic-icon-corner-value is-enhance">+${capEn(i.en, d)}</span>`
-        : ((i.cnt || 1) > 1 ? `<span class="classic-icon-corner-value is-count">${(i.cnt || 1).toLocaleString()}</span>` : '');
-    
-    // 內容組合 (加入了 statusTag)
-    let _rowInner = `<div class="classic-item-main"><div class="classic-icon-box">${imgHtml}${_invCornerValue}</div><div class="classic-name-box"><span class="${getItemColor(i)} font-bold">${getItemFullName(i)}</span><span class="classic-item-flags">${statusTag}</span></div>${i.lock ? '<span class="classic-item-lock-badge" aria-hidden="true">🔒</span>' : ''}${(i.junk && !i.lock) ? '<span class="classic-item-junk-label">廢品</span>' : ''}</div>`;   // 方格狀態：上鎖右上角；廢品灰階＋底部紅字
+    // 🎒 v3.12.0：一列的外觀（狀態、底色、圖示、名稱、角標）抽成 invRowSpec，新背包（afk-bag）共用同一份
+    let _spec = invRowSpec(i, d);
+    let _cls = _spec.cls, _rowInner = _spec.inner;
 
     // ⚡ 快速強化模式：對應分頁啟用且為可強化裝備（未鎖定）時，右側顯示勾選欄，點整列切換勾選
     let _qeType = (d.type === 'wpn' && !d.isArrow) ? 'wpn' : ((d.type === 'arm' || d.type === 'acc') ? 'arm' : null);

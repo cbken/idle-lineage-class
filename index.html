@@ -50,7 +50,7 @@
 
         <div id="login-meta-layer">
             <!-- 🏷️ 版本號（由 js/14 window.onload 依 GAME_VERSION 填入）。⚠️ 2026-09-29 加掛版：後備文字原本是上游留下的 v2.4.0，而 window.onload 要等全部圖片/音檔載完才觸發 → 玩家開頁會先看到「v2.4.0」好幾秒才跳 v3.x。改成與 js/00 GAME_VERSION 相同（站主確認原作者已停更、不再同步上游，可直接改） -->
-            <div id="login-version" class="text-center text-sm text-slate-300 font-medium tracking-wide select-none">v3.11.4</div>
+            <div id="login-version" class="text-center text-sm text-slate-300 font-medium tracking-wide select-none">v3.12.0</div>
             <div id="login-disclaimer" class="text-center text-xs text-slate-400 leading-relaxed mx-auto">本遊戲為非官方免費同人作品，絕無營利意圖；遊戲內圖片與音樂版權歸原權利方 NCSOFT 所有，其餘程式為獨立開發，嚴禁商業販售。</div>
         </div>
       </div>
@@ -559,7 +559,7 @@
     </script>
 
     <script src="js/anim-manifest.js?v=8168f3d2c7.8.12-necro-relics"></script>
-    <script src="js/00-data.js?v=361ad5d097.8.34-merc-trial-class-loot"></script>
+    <script src="js/00-data.js?v=78d8c79628.8.34-merc-trial-class-loot"></script>
 <script src="js/01-drops-config.js?v=b8a9433e29.8.26-flywing-relics"></script>
 <script src="js/02-stats-recompute.js?v=57b1c87dd8.8.26-flywing-relics"></script>
     <script src="js/03-combat-core.js?v=4f6c7e0604.8.26-flywing-relics"></script>
@@ -569,7 +569,7 @@
     <script src="js/07-skills-cast.js?v=4fd4b0a386.8.26-flywing-relics"></script>
 <script src="js/08-items-equip.js?v=f90654a076.8.16-wis-regen-interval"></script>
 <script src="js/09-vfx-render.js?v=1d2db72192.8.32-merc-vfx-origin"></script>
-    <script src="js/10-ui-tabs.js?v=5131f70078.8.14-merc-guild"></script>
+    <script src="js/10-ui-tabs.js?v=b16f3fbfa1.8.14-merc-guild"></script>
 <script src="js/11-world-map.js?v=6ab3d91e2c.8.17-item-stack-source"></script>
 <script src="js/12-npc-quests.js?v=c0155e520d.8.34-merc-trial-class-loot"></script>
 <script src="js/13-shop-save.js?v=a95bb3ba57.8.18-desktop-save-isolation"></script>
@@ -643,7 +643,7 @@
     <!-- 首頁公告卡（通用框架：檔頭 NOTICE 設成 null 就不顯示，要發公告時填一組設定即可） -->
     <script src="afk-notice.js?v=22a53935d8"></script>
     <!-- 版本更新內容：登入頁「📜 更新內容」＋更新後第一次開啟自動跳出（CHANGELOG 寫在檔內；發版規則見 docs/versioning.md） -->
-    <script src="afk-changelog.js?v=e1c51be112"></script>
+    <script src="afk-changelog.js?v=9c9344849d"></script>
     <script src="afk-history.js?v=06586ebde4"></script>
     <script src="afk-reissueid.js?v=b6195567f1"></script>
     <script src="afk-diag.js?v=5a937fd41b"></script>
@@ -676,6 +676,8 @@
     <script src="afk-bossring.js?v=8266899f32"></script>
     <script src="afk-itemsearch.js?v=23d5c1b91e"></script>
     <script src="afk-invlist.js?v=638e5a43ed"></script>
+    <!-- 🎒 新背包：武器/防具/道具只畫看得到的格子、操作列不重建；排列可選、標廢品模式、快速強化（白卷→祝卷）、批次弱化（紅卷）。核心 renderTabs 掛點 AFK_BAG.render -->
+    <script src="afk-bag.js?v=1d089ef9f5"></script>
     <script src="afk-eqlist.js?v=7a7533b7ce"></script>
     <script src="afk-npclist.js?v=cae12423d7"></script>
     <!-- afk-npclabel：村莊 NPC 名牌不要跑出畫面 -->
