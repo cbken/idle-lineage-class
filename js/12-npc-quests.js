@@ -28,7 +28,7 @@ function whSetQty(v){ _whQtyInput = (v == null) ? '' : String(v); }   // 由輸�
 function _whEscAttr(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function _whStripHtml(s){ return String(s || '').replace(/<[^>]*>/g, ''); }
 function _whSearchNorm(s){ return String(s || '').toLowerCase().replace(/[\s\u3000\-\_\/\\'"`~!@#$%^&*()[\]{}|:;,.，。！？、＋+=＝<>《》「」『』【】（）]/g, ''); }
-function _whSearchActive(){ return _whSearchNorm(_whSearchInput).length >= 2; }
+function _whSearchActive(){ return _whSearchNorm(_whSearchInput).length >= 1; }   // v3.13.1 站主：一個字就搜（原 2）
 function _whFuzzyIncludes(hay, needle){
     if(!needle) return true;
     if(hay.indexOf(needle) >= 0) return true;
@@ -38,7 +38,7 @@ function _whFuzzyIncludes(hay, needle){
 }
 function whMatchSearch(it){
     let q = _whSearchNorm(_whSearchInput);
-    if(q.length < 2) return true;
+    if(q.length < 1) return true;
     let d = DB.items[it.id] || {};
     let full = (typeof getItemFullName === 'function') ? _whStripHtml(getItemFullName(it)) : '';
     return _whFuzzyIncludes(_whSearchNorm([it.id, d.n || '', full].join(' ')), q);

@@ -1405,13 +1405,13 @@ function _pandoraNoticeHTML(m) {
     return `<span class="${c}">${_pandoraEsc(n.text)}</span>`;
 }
 
-// 收購名稱自動提示：輸入至少 2 個連續字元後，搜尋可指定收購的魔法書、一般穿著裝備、萬能藥與怪物卡片。
+// 收購名稱自動提示：輸入至少 1 個字（v3.13.1 站主要求，原 2）後，搜尋可指定收購的魔法書、一般穿著裝備、萬能藥與怪物卡片。
 function pandoraSuggestBuyItems(value) {
     let box = document.getElementById('pandora-buy-suggestions');
     if (!box) return;
     let q = String(value || '').trim();
     try { if (typeof pandoraRelicOnSearchInput === 'function') pandoraRelicOnSearchInput(q); } catch (e) {}
-    if (q.length < 2) { box.innerHTML = ''; box.classList.add('hidden'); return; }
+    if (q.length < 1) { box.innerHTML = ''; box.classList.add('hidden'); return; }
     // 輸入「遺物」時改列三種遺物搜尋，不與一般金幣收購混用。
     try {
         if (typeof pandoraRelicSuggestionHTML === 'function') {

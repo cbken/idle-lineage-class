@@ -2331,7 +2331,7 @@ function _socialPrivatePanelHtml() {
             <div class="text-sm font-bold text-slate-200 mb-2">搜尋玩家 NPC</div>
             <input id="social-npc-search" type="search" maxlength="24" autocomplete="off"
                 class="w-full bg-slate-950 border border-slate-600 rounded px-3 py-2 text-slate-100 outline-none focus:border-cyan-500"
-                placeholder="輸入至少 2 個字" oninput="renderSocialNpcSearch(this.value)">
+                placeholder="輸入名字（一個字也可以）" oninput="renderSocialNpcSearch(this.value)">
             <div id="social-npc-search-results" class="flex flex-col gap-2 mt-3"></div>
         </div>
         <div class="flex items-center justify-between">
@@ -2347,7 +2347,7 @@ function renderSocialNpcSearch(query) {
     let box = document.getElementById('social-npc-search-results');
     if (!box) return;
     let clean = String(query || '').trim();
-    if (clean.replace(/\s+/g, '').length < 2) {
+    if (clean.replace(/\s+/g, '').length < 1) {   // v3.13.1：一個字就搜（原 2）
         box.innerHTML = '';
         return;
     }
