@@ -769,7 +769,9 @@
       try { for (var k in player.eq) { var e = player.eq[k]; if (e && e.id) eq.push(k + ':' + e.id + ':' + (e.en || 0)); } } catch (e) {}
       eq.sort();
       return ['v3', mapState.current, player.lv, player.sherineWorld ? 1 : 0, player.sherineMad ? 1 : 0,
-        player.classicMode ? 1 : 0, player.traditionalMode ? 1 : 0, eq.join(',')].join('|');   // v2:2026-07-11 上游大移植(遺物效果/傭兵攻速/能力上限100/藥水隨機)殺速普遍改變,讓全體舊統計失效重取樣;v3:既有存檔的 boss 統計可能是「瞬移逃離被誤記成安全擊殺」的髒值(照它走會把玩家想躲的 BOSS 全部秒殺),一律作廢重取樣
+        player.classicMode ? 1 : 0, player.traditionalMode ? 1 : 0, eq.join(','),
+        // v3.13.0 組隊 16 人：隊伍組成也進簽章（帶 7 名量到的殺速不能拿去算帶 15 名；換隊員→重新取樣一次）
+        'A' + (player.allies || []).filter(function (a) { return a; }).map(function (a) { return a._slot; }).sort().join(',')].join('|');   // v2:2026-07-11 上游大移植(遺物效果/傭兵攻速/能力上限100/藥水隨機)殺速普遍改變,讓全體舊統計失效重取樣;v3:既有存檔的 boss 統計可能是「瞬移逃離被誤記成安全擊殺」的髒值(照它走會把玩家想躲的 BOSS 全部秒殺),一律作廢重取樣
     }
     function saveOffStats() {   // 量到新統計就更新快取(隨檢查點/結算尾的 saveGame 固化進存檔)
       try {

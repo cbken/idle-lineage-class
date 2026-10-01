@@ -383,10 +383,11 @@ function summonElementDamage(dice, ele, t, flatBonus, mult, mrPen) {
 function allySlotList() { return (function(){ let a=[]; for(let n=1;n<=SAVE_SLOT_MAX;n++){ if(String(n)!==String(currentSlot)) a.push(String(n)); } return a; })(); }   // 8 格存檔：可招募自身以外全部 7 個角色。
 const ALLY_ACTIVE_MAX = 3;         // 非王族協力傭兵上限。
 const ROYAL_ALLY_ACTIVE_MAX = 7;   // 王族最多帶滿帳號其餘 7 個角色。
+// 🎌 v3.13.0 站主 2026-10-01：組隊改 16 人（隊長＋15 名傭兵＝帳號其餘 15 個存檔位全部可帶），所有職業都一樣、不再看魅力。
+//   舊規則（非王族 3／王族 3＋魅力/15 封頂 7）保留在 ALLY_ACTIVE_MAX／ROYAL_ALLY_ACTIVE_MAX 供參考，不再使用。
+const PARTY_ALLY_MAX = 15;
 function allyActiveCap() {
-    if (!player || player.cls !== 'royal') return ALLY_ACTIVE_MAX;
-    const cha = Math.max(0, Math.min(60, Math.floor((player.d && player.d.cha) || 0)));
-    return Math.min(ROYAL_ALLY_ACTIVE_MAX, ALLY_ACTIVE_MAX + Math.floor(cha / 15));   // 魅力 0~14/15/30/45/60 → 3/4/5/6/7 名
+    return Math.min(PARTY_ALLY_MAX, Math.max(1, (typeof SAVE_SLOT_MAX === 'number' ? SAVE_SLOT_MAX : 8) - 1));
 }
 // 王族魅力只調整可帶傭兵數量，不再影響傭兵傷害、HP 或 MP。
 // 保留此相容函式供既有各傷害路徑呼叫；固定回傳 1 可一次停用所有舊魅力能力倍率。
@@ -3620,7 +3621,7 @@ function toggleAlly(slotN) {
         logSys(`協力傭兵（存檔 ${slotN}）已解散。${_expMsg}`);
     } else {
         let _allyCap = allyActiveCap();
-        if ((player.allies.length || 0) >= _allyCap) {   // 非王族固定 3；王族為 3＋floor(魅力/15)，封頂 7。
+        if ((player.allies.length || 0) >= _allyCap) {   // v3.13.0：所有職業 15 名（組隊 16 人）
             logSys(`<span class="text-red-400">協力傭兵最多同時上場 ${_allyCap} 名，請先解除一名再招募。</span>`);
             saveGame(); updateUI();
             let _c2 = document.getElementById('interaction-content'); if(_c2) renderAllyNPC(_c2);
@@ -4064,9 +4065,7 @@ function renderAllyQuestManager(div, slotN) {
 function renderAllyNPC(div) {
     const _activeCap = allyActiveCap();
     const _royalCha = Math.max(0, Math.floor((player.d && player.d.cha) || 0));
-    const _capHint = player.cls === 'royal'
-        ? `<br><span class="text-amber-300">王族魅力不影響傭兵能力；每滿 15 點魅力可多帶 1 名。目前魅力 ${_royalCha}，可同時帶 ${_activeCap}/7 名。</span>`
-        : `<br><span class="text-slate-400">目前可同時帶 ${_activeCap} 名傭兵。</span>`;
+    const _capHint = `<br><span class="text-amber-300">組隊上限 ${_activeCap + 1} 人：可同時帶 ${_activeCap} 名傭兵（不看職業、不看魅力）。目前已帶 ${(player.allies || []).length} 名。</span>`;
     const _hiredMap = mercEmploymentMap();   // 🧑‍🤝‍🧑 v3.7.93 一次掃完全部存檔位；逐列各查一次會變成 7×7 次解壓
     let rows = allySlotList().map(n => {
         let sum = slotSummary(n);

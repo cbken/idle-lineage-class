@@ -2359,8 +2359,11 @@ if (typeof manualCast === 'function' && !manualCast._pmWrapped) {
 //    改為「玩家＋傭兵依招募順序站固定位置」：玩家＋傭兵1~3 前排（bottom 2·z 28）·傭兵4~7 後排（bottom 26·z 4=站後面有景深）·永不跳位、zIndex 恆為正。
 function _partySpritePos() {
     let five = true; try { five = (typeof backSlotsActive !== 'function') || backSlotsActive(); } catch (e) {}
-    return five ? { P: { x: '45.5%', b: 2 }, A: [{ x: '23%', b: 2 }, { x: '66%', b: 2 }, { x: '83.5%', b: 2 }, { x: '28%', b: 26 }, { x: '51%', b: 26 }, { x: '70.5%', b: 26 }, { x: '7%', b: 26 }] }
-                : { P: { x: '39%', b: 2 },   A: [{ x: '28%', b: 2 }, { x: '62%', b: 2 }, { x: '72%', b: 2 }, { x: '33.5%', b: 26 }, { x: '57%', b: 26 }, { x: '77.5%', b: 26 }, { x: '23%', b: 26 }] };
+    // 🎌 v3.13.0 組隊 16 人：第 8~15 名傭兵站第三排（b:48，z 固定 3＝在第二排後面）；原本 8 人以上全疊在第 7 格
+    const R3 = five ? ['12%', '23%', '34%', '45%', '56%', '67%', '78%', '89%'] : ['20%', '29%', '38%', '47%', '56%', '65%', '74%', '83%'];
+    const row3 = R3.map(x => ({ x: x, b: 48, z: 3 }));
+    return five ? { P: { x: '45.5%', b: 2 }, A: [{ x: '23%', b: 2 }, { x: '66%', b: 2 }, { x: '83.5%', b: 2 }, { x: '28%', b: 26 }, { x: '51%', b: 26 }, { x: '70.5%', b: 26 }, { x: '7%', b: 26 }].concat(row3) }
+                : { P: { x: '39%', b: 2 },   A: [{ x: '28%', b: 2 }, { x: '62%', b: 2 }, { x: '72%', b: 2 }, { x: '33.5%', b: 26 }, { x: '57%', b: 26 }, { x: '77.5%', b: 26 }, { x: '23%', b: 26 }].concat(row3) };
 }
 let _allySpriteStates = {};   // slot → { act, t, prevHp, el, imgs, key, skGen }
 function _allySpriteTrigger(ally, k, skId) {   // js/06 掛點：allyAttackOnce→'attack'·三施法函式→'skill'
@@ -2421,7 +2424,7 @@ function _allySpritesApply() {   // 8fps ticker 驅動
         } else if (st.el.parentElement !== bv) bv.appendChild(st.el);
         let w = (a.idle && a.idle[0]) ? a.idle[0].naturalWidth : 100;
         st.el.style.width = w + 'px';
-        { let _ps = _partySpritePos().A, _pp = _ps[Math.min(i, _ps.length - 1)]; st.el.style.left = 'calc(' + _pp.x + ' - ' + Math.round(w / 2) + 'px)'; st.el.style.bottom = _pp.b + 'px'; st.el.style.zIndex = String(30 - _pp.b); }   // 每輪更新（隊員順位/地圖版面 5格↔3格 可能變）；🤝 v3.6.89 固定站位＝依招募順序（前排 0~2·後排 3~6）
+        { let _ps = _partySpritePos().A, _pp = _ps[Math.min(i, _ps.length - 1)]; st.el.style.left = 'calc(' + _pp.x + ' - ' + Math.round(w / 2) + 'px)'; st.el.style.bottom = _pp.b + 'px'; st.el.style.zIndex = String(_pp.z != null ? _pp.z : 30 - _pp.b); }   // 每輪更新（隊員順位/地圖版面 5格↔3格 可能變）；🤝 v3.6.89 固定站位＝依招募順序（前排 0~2·後排 3~6）
         if (CLASS_ANIM_8DIR.has(ally.avatar) || MORPH_ANIM_3DIR.has(_actorMorphName(ally) || '')) _classFacing8(ally, st.el);   // 🧭 職業／變身皆依攻擊目標更新朝向（傭兵固定站位不走位→恆為目標朝向）
         // 動作＋幀（同主玩家邏輯·wskill 武器專屬 skill 優先·咆哮通用）
         let act = null, f = 0, _useW = false;

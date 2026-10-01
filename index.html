@@ -50,7 +50,7 @@
 
         <div id="login-meta-layer">
             <!-- 🏷️ 版本號（由 js/14 window.onload 依 GAME_VERSION 填入）。⚠️ 2026-09-29 加掛版：後備文字原本是上游留下的 v2.4.0，而 window.onload 要等全部圖片/音檔載完才觸發 → 玩家開頁會先看到「v2.4.0」好幾秒才跳 v3.x。改成與 js/00 GAME_VERSION 相同（站主確認原作者已停更、不再同步上游，可直接改） -->
-            <div id="login-version" class="text-center text-sm text-slate-300 font-medium tracking-wide select-none">v3.12.1</div>
+            <div id="login-version" class="text-center text-sm text-slate-300 font-medium tracking-wide select-none">v3.13.0</div>
             <div id="login-disclaimer" class="text-center text-xs text-slate-400 leading-relaxed mx-auto">本遊戲為非官方免費同人作品，絕無營利意圖；遊戲內圖片與音樂版權歸原權利方 NCSOFT 所有，其餘程式為獨立開發，嚴禁商業販售。</div>
         </div>
       </div>
@@ -559,16 +559,16 @@
     </script>
 
     <script src="js/anim-manifest.js?v=8168f3d2c7.8.12-necro-relics"></script>
-    <script src="js/00-data.js?v=246a662f13.8.34-merc-trial-class-loot"></script>
+    <script src="js/00-data.js?v=e749e21594.8.34-merc-trial-class-loot"></script>
 <script src="js/01-drops-config.js?v=b8a9433e29.8.26-flywing-relics"></script>
 <script src="js/02-stats-recompute.js?v=57b1c87dd8.8.26-flywing-relics"></script>
     <script src="js/03-combat-core.js?v=4f6c7e0604.8.26-flywing-relics"></script>
     <script src="js/04-combat-attack.js?v=a3772e77b4.8.26-flywing-relics"></script>
 <script src="js/05-kill-progression.js?v=eb9a296b29.8.34-merc-trial-class-loot"></script>
-    <script src="js/06-status-allies.js?v=f3d9b433a3.8.34-merc-trial-class-loot"></script>
+    <script src="js/06-status-allies.js?v=690017ce73.8.34-merc-trial-class-loot"></script>
     <script src="js/07-skills-cast.js?v=4fd4b0a386.8.26-flywing-relics"></script>
 <script src="js/08-items-equip.js?v=f90654a076.8.16-wis-regen-interval"></script>
-<script src="js/09-vfx-render.js?v=1d2db72192.8.32-merc-vfx-origin"></script>
+<script src="js/09-vfx-render.js?v=97b821b3ca.8.32-merc-vfx-origin"></script>
     <script src="js/10-ui-tabs.js?v=b16f3fbfa1.8.14-merc-guild"></script>
 <script src="js/11-world-map.js?v=6ab3d91e2c.8.17-item-stack-source"></script>
 <script src="js/12-npc-quests.js?v=c0155e520d.8.34-merc-trial-class-loot"></script>
@@ -615,7 +615,7 @@
     <script src="afk-ui.js?v=e832474894"></script>
     <script src="afk-extradata.js?v=0d4508266e"></script>
     <!-- 離線快速結算（自己 monkey-patch 包核心 saveGame/loadGame/changeMap/killMob/gainItem；搭配 maybeSpawnMobs 補丁） -->
-    <script src="afk-offline.js?v=cad9075918"></script>
+    <script src="afk-offline.js?v=602298581c"></script>
     <!-- 手機版面 / 返回鍵 -->
     <script src="afk-mobile.js?v=2c98ed403f"></script>
     <script src="afk-backnav.js?v=a02389afc7"></script>
@@ -630,7 +630,7 @@
     <script src="afk-slotinfo.js?v=903bcf7681"></script>
     <script src="afk-loadslots.js?v=a43834b125"></script>
     <script src="afk-dex.js?v=b04442b67a"></script>
-    <script src="afk-wiki.js?v=2eb74f7ae6"></script>
+    <script src="afk-wiki.js?v=f218688636"></script>
     <!-- 設定選單 / 存檔 / 診斷 / 離線紀錄 -->
     <script src="afk-storage.js?v=302890a0df"></script>
     <!-- 整包備份／還原（本機檔案）：入口掛在 afk-storage 的設定選單裡，必須排在它之後 -->
@@ -643,7 +643,7 @@
     <!-- 首頁公告卡（通用框架：檔頭 NOTICE 設成 null 就不顯示，要發公告時填一組設定即可） -->
     <script src="afk-notice.js?v=22a53935d8"></script>
     <!-- 版本更新內容：登入頁「📜 更新內容」＋更新後第一次開啟自動跳出（CHANGELOG 寫在檔內；發版規則見 docs/versioning.md） -->
-    <script src="afk-changelog.js?v=6777ae16f3"></script>
+    <script src="afk-changelog.js?v=7668198d2d"></script>
     <script src="afk-history.js?v=06586ebde4"></script>
     <script src="afk-reissueid.js?v=b6195567f1"></script>
     <script src="afk-diag.js?v=5a937fd41b"></script>
@@ -657,7 +657,7 @@
     <!-- 廢品標記管理：入口排在木人場鈕下方（自己 insertAdjacentElement，不靠載入順序） -->
     <script src="afk-junkmgr.js?v=31033a8a42"></script>
     <!-- 傭兵招募擋下提示：核心只寫系統日誌，改跳彈窗（不重刻條件，收核心自己的紅字） -->
-    <script src="afk-mercguard.js?v=b05f7ef97d"></script>
+    <script src="afk-mercguard.js?v=1138ba265b"></script>
     <!-- 傭兵技能清單即時更新：隊伍面板 skill 分頁的重建簽章沒把技能清單算進去，傭兵換了授予技能的裝備/學了新魔法，下拉停在舊清單 -->
     <script src="afk-squadsync.js?v=5af6f9f1cc"></script>
     <!-- 金卡怪掉遠古裝備：遠古系在上游是「絕版」(rollAffixesNew 恆回 anc:false)，這裡把產生管道接回來，條件綁卡片收集冊金階 -->
