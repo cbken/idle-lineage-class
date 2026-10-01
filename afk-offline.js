@@ -704,6 +704,7 @@
     var FAST_GOOD_KILLS = 60;         // 樣本殺數低於此 → 平均殺速統計誤差偏大(~±13%),延長取樣一次收斂
     var FAST_MIN_HP_PCT = 70;         // 血量安全門檻起點 %(取樣 + BOSS safe 共用):真模擬 done=0 時的門檻
     var HP_FLOOR_ZERO_TICKS = 12000;  // 血量門檻「線性降到 0」的時點:真模擬連續存活滿 20 分鐘(12000 拍)沒死 → 門檻歸 0(之後一律切快速、BOSS 一律 safe)。撐過這段=打得過→完全信任;死了外層撞死即停,根本走不到門檻歸 0。
+    var SHORT_CACHE_MIN_TICKS = 600;  // v3.12.1：離線滿 1 分鐘、且殺速快取命中 → 短離線也直接快轉
     var FAST_MIN_REMAIN = 6000;       // 取樣後剩不到 10 分鐘 → 全模擬本來就快,不值得切
     // 🏝️ 遺忘之島「本島」納入快速(2026-07-10 使用者提議):本島=無限刷怪圖、無後續推進,與一般圖同等待遇;
     //   「途中」(travel)那段維持全模擬——怪組與本島不同,取樣不能混用。但它只是「打倒傳送門 BOSS 才進本島」
@@ -1053,6 +1054,13 @@
       fastMode = true; fastWhy = 'cache';
       console.info('[AFK] 💾 統計快取命中:跳過取樣與 BOSS 首打,直接快速結算(每事件 ' + svcPerEvent.toFixed(1) + ' 拍×' + batchPerEvent.toFixed(2) + ' 隻,BOSS 快取 ' + Object.keys(bossStats).length + ' 種)。');
       return true;
+    }
+    // ⚡ v3.12.1 短離線也吃快取（站主 2026-10-01：筆電補跑很慢）：離線不到 15 分鐘原本一律逐拍全模擬，
+    //   弱 CPU 約 500 拍/秒 → 7 分鐘離線要等 10 秒。若有「同地圖＋同等級＋同裝備」的殺速快取（72 小時內量的），
+    //   直接走快轉——快取不中就維持原本全模擬（不為了短離線去取樣：取樣本身就要 3000 拍）。
+    if (!fastEligible && fastWhy === 'short' && totalTicks >= SHORT_CACHE_MIN_TICKS) {
+      fastEligible = true;
+      if (!tryOffStatsCache()) fastEligible = false;
     }
     if (fastEligible) tryOffStatsCache();
     if (fastEligible && !fastMode) beginSample(0);

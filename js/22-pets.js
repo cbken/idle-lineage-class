@@ -184,7 +184,20 @@ function petMasteryTakenMult() { return petMasteryOn() ? 0.5 : 1; }   // 受到�
 // 🏺 遺物 馴獸師手做寵物專用盔甲：該寵物裝備的護甲（p.eq.arm）帶 petDmgReduce → 受到傷害 ×(1−petDmgReduce)。與 petMasteryTakenMult 同列乘算。
 function petArmorDmgReduceMult(p) { let a = p && p.eq && p.eq.arm; let d = a ? DB.items[a.id] : null; return (d && d.petDmgReduce) ? Math.max(0, 1 - d.petDmgReduce) : 1; }
 // 🏺 v3.7.20 蜥蜴領主的王冠等「全寵物光環」欄位加總：掃玩家＋未倒地傭兵全部裝備欄（範圍與 petGearBonus 的 petDmgAll 一致）
+// ⚡ v3.12.1：每拍會被呼叫很多次（每隻寵物喝水判斷/恢復/顯示都經 petMhpEff），每次掃玩家＋7 傭兵全身裝備 →
+//   實測佔補跑 CPU 約 14%。同一拍、同一角色、同一隊伍組成內裝備不會變 → 以 (tick, player, 隊伍) 為鍵快取。
+let _petAuraCache = { t: -1, p: null, n: -1, ms: 0, v: {} };   // ms：遊戲暫停（拍數不動）時換裝備也最多 250ms 內生效
 function petAuraSum(field) {
+    let _tk = (typeof state !== 'undefined' && state) ? state.ticks : -1;
+    let _pl = (typeof player !== 'undefined') ? player : null;
+    let _an = (_pl && _pl.allies) ? _pl.allies.reduce((c, a) => c + (a && !a._downed ? 1 : 0), 0) : 0;
+    let _c = _petAuraCache;
+    let _now = Date.now();
+    if (_c.t !== _tk || _c.p !== _pl || _c.n !== _an || _now - _c.ms > 250) { _c.t = _tk; _c.p = _pl; _c.n = _an; _c.ms = _now; _c.v = {}; }
+    if (field in _c.v) return _c.v[field];
+    return (_c.v[field] = _petAuraSumRaw(field));
+}
+function _petAuraSumRaw(field) {
     let s = 0;
     let _scan = function (c) { if (!c || !c.eq) return; for (let k in c.eq) { let e = c.eq[k]; if (!e) continue; let d = DB.items[e.id]; if (d && d[field]) s += d[field]; } };
     if (typeof player !== 'undefined' && player) { _scan(player); (player.allies || []).forEach(a => { if (a && !a._downed) _scan(a); }); }
