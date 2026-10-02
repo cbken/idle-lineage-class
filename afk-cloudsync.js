@@ -96,7 +96,20 @@
   function apiUrl(key) {
     var s = getSlot();
     if (!s) throw new Error('slot not chosen');   // 防呆：沒選人之前不准對雲端做任何事
-    return ENDPOINT + '?key=' + encodeURIComponent(key) + '&slot=' + s;
+    // v3.13.2：加防快取參數。站主 2026-10-02「每天早上第一次開都讀到舊檔、重新整理才對」——
+    //   cache:'no-store' 只管得到瀏覽器自己的快取，管不到中間層（防毒軟體網頁防護／代理）；網址每次不同就誰都快取不到。
+    return ENDPOINT + '?key=' + encodeURIComponent(key) + '&slot=' + s + '&_=' + Date.now();
+  }
+  // 📝 v3.13.2 同步診斷：最近 12 次「拉雲端」的結果記在 localStorage（會跟著整包上雲端 → 我們事後讀得到）。
+  var K_PLOG = 'afk_cs_pulllog';
+  function plog(reason, res, extra) {
+    try {
+      var a = JSON.parse(localStorage.getItem(K_PLOG) || '[]'); if (!Array.isArray(a)) a = [];
+      var o = { t: Date.now(), r: reason, x: res, seen: getSeen(), dev: (typeof screen !== 'undefined' ? screen.width + 'x' + screen.height : ''), on: (typeof navigator !== 'undefined' && 'onLine' in navigator) ? navigator.onLine : null };
+      if (extra) for (var k in extra) o[k] = extra[k];
+      a.push(o); while (a.length > 12) a.shift();
+      localStorage.setItem(K_PLOG, JSON.stringify(a));
+    } catch (e) {}
   }
 
   // ── 額度四道閘門 ───────────────────────────────────────────
@@ -160,7 +173,7 @@
     var key = getKey(); if (!key) return;
     if (players()) return;                                    // 今天問過了
     try { localStorage.setItem(K_NP, utcDay() + '|1'); } catch (e) {}   // 先卡住，避免多分頁同時問
-    fetch(ENDPOINT + '?key=' + encodeURIComponent(key) + '&slots=1', { cache: 'no-store' })
+    fetch(ENDPOINT + '?key=' + encodeURIComponent(key) + '&slots=1&_=' + Date.now(), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
         var n = j && Number(j.count);
@@ -224,6 +237,7 @@
     // 今日額度計數與玩家數不能被 clear 洗掉（洗掉＝守門員歸零，額度保護失效）
     var myWq = null, myNp = null;
     try { myWq = localStorage.getItem(K_WQ); myNp = localStorage.getItem(K_NP); } catch (e) {}
+    var myPlog = null; try { myPlog = localStorage.getItem(K_PLOG); } catch (e) {}   // v3.13.2 同步診斷紀錄屬於這台裝置
     var names = Object.keys(pack.keys);
     try { localStorage.clear(); } catch (e) { _applying = false; _applyAt = 0; return false; }
     for (var i = 0; i < names.length; i++) {
@@ -234,6 +248,7 @@
     // 通行碼/選人狀態也屬於「這台裝置」：沒這兩行，pull 完 reload 會被踢回 gate 重輸一次
     try { if (myGate) localStorage.setItem('ilc_gate_ok', myGate); localStorage.setItem('ilc_slot_ok', '1'); } catch (e) {}
     try { if (myWq) localStorage.setItem(K_WQ, myWq); if (myNp) localStorage.setItem(K_NP, myNp); } catch (e) {}
+    try { if (myPlog) localStorage.setItem(K_PLOG, myPlog); } catch (e) {}
     setSeen(cloudTs);
     // 剛套用完＝這台的內容就是雲端那份 → 指紋記起來，省掉「套用後馬上又原樣推回去」那次寫入
     setHash(packFingerprint(pack));
@@ -377,7 +392,7 @@
 
   function pull(reason) {
     unstick(reason === 'manual' ? STUCK_MANUAL_MS : STUCK_MS);
-    if (!on() || _busy || _applying) return;
+    if (!on() || _busy || _applying) { if (reason === 'retry' && on() && !_applying) retryPull('busy'); return; }
     var key = getKey(); if (!key) return;
     _busy = true; _busyAt = Date.now();
     fetchT(apiUrl(key), { cache: 'no-store' }).then(function (r) {
@@ -385,9 +400,15 @@
       return r.json();
     }).then(function (j) {
       if (!j || !j.pack || !(j.ts > getSeen())) {
+        // 拿到的雲端比「這台已經看過的」還舊 → 一定是某一層給了舊回應（正常情況雲端只會越來越新）→ 記下來、稍後重問
+        var _older = !!(j && j.ts && j.ts < getSeen());
+        plog(reason, _older ? 'older' : 'same', { got: j && j.ts || 0 });
         if (reason === 'manual') setStatus('✅ 雲端沒有更新的進度（這台就是最新）。');
-        release(); return;
+        release();
+        if (_older) retryPull('older');
+        return;
       }
+      plog(reason, 'newer', { got: j.ts });
       if (!validatePack(j.pack)) { setStatus('❌ 雲端資料格式不對，未套用。', true); release(); return; }
       // 🛡️ 這台有真進度、雲端那包卻是空的 → 絕不套用（空包蓋真檔=災難）
       if (localHasProgress() && !packHasProgress(j.pack)) {
@@ -404,8 +425,22 @@
       } else {
         setStatus('❌ 套用雲端進度失敗（儲存空間可能不足）。本機資料可能不完整，請到「完整資料備份與還原」用備份檔救回。', true);
       }
-    }).catch(function () { _busy = false; _busyAt = 0; _pendingPush = false; if (reason === 'manual') setStatus('❌ 連不上雲端（網路不穩或請求逾時）。', true); });
+    }).catch(function (e) {
+      _busy = false; _busyAt = 0; _pendingPush = false;
+      plog(reason, 'fail', { e: String(e && e.message || e).slice(0, 60) });
+      if (reason === 'manual') setStatus('❌ 連不上雲端（網路不穩或請求逾時）。', true);
+      // 🌅 v3.13.2：開機那一次拉失敗（早上筆電剛醒、網路還沒好）→ 不能就這樣算了，否則整天玩的是這台的舊檔
+      if (reason === 'load' || reason === 'retry') retryPull('fail');
+    });
   }
+  // 開機拉雲端失敗／拿到舊回應 → 3、6、12、24、48、60…秒後再問，最多 10 次；網路恢復（online）時立刻再問。
+  var _retryN = 0, _retryTid = 0;
+  function retryPull(why) {
+    if (_retryTid || _retryN >= 10) return;
+    var wait = Math.min(60000, 3000 * Math.pow(2, _retryN)); _retryN++;
+    _retryTid = setTimeout(function () { _retryTid = 0; pull('retry'); }, wait);
+  }
+  try { window.addEventListener('online', function () { if (_retryTid) { clearTimeout(_retryTid); _retryTid = 0; pull('retry'); } }); } catch (e) {}
 
   // ── 自動連結（固定金鑰） ──────────────────────────────────
   // 這台還沒設金鑰 → 自動掛上 FIXED_KEY。方向判斷：
@@ -810,7 +845,7 @@
 
     // 摘要：一次要求拿四個槽（伺服器端已縮成幾百 bytes）。失敗就只是沒有副標，不擋選人。
     try {
-      fetch(ENDPOINT + '?key=' + encodeURIComponent(FIXED_KEY) + '&slot=1&summary=1', { cache: 'no-store' })
+      fetch(ENDPOINT + '?key=' + encodeURIComponent(FIXED_KEY) + '&slot=1&summary=1&_=' + Date.now(), { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (j) {
           if (!j || !j.slots) return;
