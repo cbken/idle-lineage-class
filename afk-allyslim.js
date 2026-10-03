@@ -49,7 +49,8 @@
         'pandoraMarket2',   // 潘朵拉遺物市場（62 KB）
         '_offStats',        // 離線統計（32 KB）
         'autoSellRules',    // 自動販賣規則（13 KB）
-        'lastMapByCat'      // 各類別最後所在地圖（13 KB）
+        'lastMapByCat',     // 各類別最後所在地圖（13 KB）
+        'ladder'            // 無限天梯紀錄（afk-ladder 只讀 player.ladder，傭兵身上的副本沒人讀）
     ];
 
     function slimOne(ally) {
