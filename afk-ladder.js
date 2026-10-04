@@ -42,6 +42,7 @@
   var BOARD_TTL = 60000;
   var WRITE_CAP_KEY = 'afk_ladder_wq';
   var WRITE_CAP = 20;
+  var COIN_DAY_CAP = 60;            // 每個角色每天最多拿的天梯幣（Ken 10/4：不設上限一小時可刷 10 張不爆卷，強化就沒意義了）
   // 難度曲線（平衡用，集中在這裡調）
   var BOSS_HP_AT_50 = 1700000;      // 第 50 層頭目血量（10/4 實測：玩家1 王族＋7 傭兵 約每分鐘 325 萬傷害 → 卡在 60 層左右）
   var HP_GROWTH_LOW = 1.147;        // 1~50 層每層血量 ×1.147
@@ -107,6 +108,8 @@
     if (!(L.coins >= 0)) L.coins = 0;
     if (!(L.runs >= 0)) L.runs = 0;
     if (!L.wk || typeof L.wk !== 'object') L.wk = { id: '', f: 0 };
+    var today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+    if (L.coinDay !== today) { L.coinDay = today; L.coinToday = 0; }
     return L;
   }
   function cloudKey() { try { return localStorage.getItem('afk_cs_key') || ''; } catch (e) { return ''; } }
@@ -244,7 +247,7 @@
     closeHud();
     var sameChar = player && (String(player.enSeed || '') + '|' + player.name) === r.seed;
     var L = sameChar ? data() : null;   // 中途換角色＝這輪作廢，不能把紀錄記到新角色身上
-    var result = { reason: reason, start: r.start, reached: r.floor, cleared: r.cleared, clearedT: r.clearedT, newBest: false, gained: r.gained, coins: r.coins };
+    var result = { capped: !!r.capped, reason: reason, start: r.start, reached: r.floor, cleared: r.cleared, clearedT: r.clearedT, newBest: false, gained: r.gained, coins: r.coins };
     if (L && r.cleared > 0) {
       if (r.cleared > L.best || (r.cleared === L.best && r.clearedT < L.bestT)) { result.newBest = r.cleared > L.best; L.best = r.cleared; L.bestT = r.clearedT; }
       var wk = weekId();
@@ -271,10 +274,11 @@
     var f = run.floor, used = state.ticks - run.floorAt;
     run.cleared = f; run.clearedT = used;
     var L = data();
-    var coins = 1 + Math.floor(f / 10);
-    L.coins += coins; run.coins += coins;
+    var coins = Math.min(1 + Math.floor(f / 10), Math.max(0, COIN_DAY_CAP - L.coinToday));
+    L.coins += coins; L.coinToday += coins; run.coins += coins;
+    if (coins === 0) run.capped = true;
     if (f > L.first) { grantFirstClear(f); L.first = f; }
-    if (!ff()) log('<span class="text-cyan-200">🗼 第 ' + f + ' 層通過（' + (used / 10).toFixed(1) + ' 秒）＋天梯幣 ' + coins + '</span>');
+    if (!ff()) log('<span class="text-cyan-200">🗼 第 ' + f + ' 層通過（' + (used / 10).toFixed(1) + ' 秒）' + (coins ? '＋天梯幣 ' + coins : '（今天的天梯幣已拿滿）') + '</span>');
     run.nextAt = state.ticks + GAP_TICKS;
     refillTeam(GAP_HEAL);
   }
@@ -640,7 +644,7 @@
     var html = '<div style="font-size:15px;line-height:1.8">' +
       (r.cleared > 0 ? '通過第 <b style="color:#fde68a;font-size:20px">' + r.cleared + '</b> 層' + (r.newBest ? ' <b style="color:#f472b6">新紀錄！</b>' : '') : '這次沒有通過任何一層') +
       '<br><span style="color:#94a3b8">停在第 ' + r.reached + ' 層（' + why + '）</span>' +
-      (r.coins ? '<br>天梯幣 +' + r.coins : '') +
+      (r.coins ? '<br>天梯幣 +' + r.coins : '') + (r.capped ? '<br><span style="color:#94a3b8">今天的天梯幣已拿滿（每天 ' + COIN_DAY_CAP + '），明天再來</span>' : '') +
       (gainedText(r.gained) ? '<br><span style="color:#67e8f9">首通獎勵：' + esc(gainedText(r.gained)) + '</span>' : '') + '</div>';
     modal('🗼 無限天梯', html);
   }
@@ -664,7 +668,7 @@
     var h = '<div class="p-2 text-sm" style="line-height:1.7">';
     h += '<div class="bg-slate-900/70 border border-cyan-700/60 rounded-lg p-3 mb-2">' +
       '<div class="text-cyan-300 font-bold">我的紀錄</div>' +
-      '<div>最高 <b class="text-yellow-300">' + L.best + '</b> 層' + (L.best ? '（' + (L.bestT / 10).toFixed(1) + ' 秒）' : '') + '　天梯幣 <b class="text-yellow-300">' + L.coins + '</b></div>' +
+      '<div>最高 <b class="text-yellow-300">' + L.best + '</b> 層' + (L.best ? '（' + (L.bestT / 10).toFixed(1) + ' 秒）' : '') + '　天梯幣 <b class="text-yellow-300">' + L.coins + '</b> <span class="text-slate-400">（今天 ' + L.coinToday + '/' + COIN_DAY_CAP + '）</span></div>' +
       (nextMilestone(L.first) ? '<div class="text-slate-400">下個首通獎勵：' + esc(nextMilestone(L.first)) + '</div>' : '') +
       (champ ? '<div class="text-amber-300">👑 本週天梯之王：玩家' + champ.players.join('、玩家') + '（上週 ' + champ.floor + ' 層）' + (champ.players.indexOf(me) >= 0 ? '— 你這週經驗 +10%、掉寶 +10%' : '') + '</div>' : '') +
       '</div>';
