@@ -50,7 +50,7 @@
 
         <div id="login-meta-layer">
             <!-- 🏷️ 版本號（由 js/14 window.onload 依 GAME_VERSION 填入）。⚠️ 2026-09-29 加掛版：後備文字原本是上游留下的 v2.4.0，而 window.onload 要等全部圖片/音檔載完才觸發 → 玩家開頁會先看到「v2.4.0」好幾秒才跳 v3.x。改成與 js/00 GAME_VERSION 相同（站主確認原作者已停更、不再同步上游，可直接改） -->
-            <div id="login-version" class="text-center text-sm text-slate-300 font-medium tracking-wide select-none">v3.13.2</div>
+            <div id="login-version" class="text-center text-sm text-slate-300 font-medium tracking-wide select-none">v3.14.0</div>
             <div id="login-disclaimer" class="text-center text-xs text-slate-400 leading-relaxed mx-auto">本遊戲為非官方免費同人作品，絕無營利意圖；遊戲內圖片與音樂版權歸原權利方 NCSOFT 所有，其餘程式為獨立開發，嚴禁商業販售。</div>
         </div>
       </div>
@@ -559,7 +559,7 @@
     </script>
 
     <script src="js/anim-manifest.js?v=8168f3d2c7.8.12-necro-relics"></script>
-    <script src="js/00-data.js?v=ca2e6a9ac9.8.34-merc-trial-class-loot"></script>
+    <script src="js/00-data.js?v=815faa2195.8.34-merc-trial-class-loot"></script>
 <script src="js/01-drops-config.js?v=b8a9433e29.8.26-flywing-relics"></script>
 <script src="js/02-stats-recompute.js?v=57b1c87dd8.8.26-flywing-relics"></script>
     <script src="js/03-combat-core.js?v=4f6c7e0604.8.26-flywing-relics"></script>
@@ -598,7 +598,7 @@
          無開關：這是顯示正確性，不是功能。實測 forceDarkModeEnabled+darkModeImagePolicy=smart 可重現、加這行即解。 -->
     <style>:root{color-scheme:dark}</style>
     <!-- afk-toggles 必須最先載入：外掛開關中樞（逃生門，自己不可被關；某支外掛壞掉時玩家關掉它就能用原版繼續玩） -->
-    <script src="afk-toggles.js?v=7803435f68"></script>
+    <script src="afk-toggles.js?v=9aff163e8f"></script>
     <!-- afk-banner：非官方轉載橫幅讓位（基礎設施、無開關；不可掛在 afk-mobile 裡，玩家關掉手機版面就會整個頂端被蓋住） -->
     <script src="afk-banner.js?v=29fa2d5746"></script>
     <!-- afk-nobanner：隱藏非官方橫幅（預設關；只藏不刪＝不跟 gameLoop 的重掛打架，確認過才生效） -->
@@ -610,7 +610,7 @@
     <!-- afk-clanroster：血盟名冊瘦身——名冊只增不減（上限一萬筆），而野外 PVP 每生一個對手就整包讀改寫一次，越玩越慢。排在 synccompress 之後（它包 _lzSet，我們包 _clanWriteState，互不干擾） -->
     <script src="afk-clanroster.js?v=7d1358ef78"></script>
     <!-- afk-allyslim：傭兵快照瘦身——傭兵是來源角色的深拷貝，隊長存檔裡每個傭兵都各帶一份廢品標記等用不到的資料（實測佔存檔三成）。包 saveGame，存檔前清空 -->
-    <script src="afk-allyslim.js?v=6b4a8e1e98"></script>
+    <script src="afk-allyslim.js?v=316a1963a3"></script>
     <!-- 共用基礎：自製彈窗/確認、dex/wiki 共用資料表（其他外掛依賴，排前面） -->
     <script src="afk-ui.js?v=e832474894"></script>
     <script src="afk-extradata.js?v=0d4508266e"></script>
@@ -643,7 +643,7 @@
     <!-- 首頁公告卡（通用框架：檔頭 NOTICE 設成 null 就不顯示，要發公告時填一組設定即可） -->
     <script src="afk-notice.js?v=22a53935d8"></script>
     <!-- 版本更新內容：登入頁「📜 更新內容」＋更新後第一次開啟自動跳出（CHANGELOG 寫在檔內；發版規則見 docs/versioning.md） -->
-    <script src="afk-changelog.js?v=ea7406ca23"></script>
+    <script src="afk-changelog.js?v=54f27ca84a"></script>
     <script src="afk-history.js?v=06586ebde4"></script>
     <script src="afk-reissueid.js?v=b6195567f1"></script>
     <script src="afk-diag.js?v=5a937fd41b"></script>
@@ -718,7 +718,7 @@
     <script src="afk-whbatch.js?v=40dee81b7f"></script>
     <!-- 迷你遊戲（我方自製） -->
     <script src="afk-dograce.js?v=72135b4c65"></script>
-    <script src="afk-ladder.js?v=0000000000"></script>
+    <script src="afk-ladder.js?v=e04d607d12"></script>
     <!-- PWA / SW / 統計 / 品牌（skin 固定排最後） -->
     <script src="afk-pwa.js?v=ea69bd3a19"></script>
     <script src="afk-sw.js?v=0c1440decf"></script>
