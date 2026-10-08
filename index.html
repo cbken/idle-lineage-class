@@ -22,7 +22,7 @@
     <title>放置天堂 - 日出之國</title>
     <link rel="icon" type="image/png" href="assets/favicon.png">   <!-- 🖼️ 瀏覽器分頁圖示(favicon)：把你的圖放到 assets/favicon.png 即生效；可改 href 路徑或副檔名(.ico/.svg) -->
 
-    <link rel="stylesheet" href="css/style.css?v=80ca1493e1.8.6-npc-private-chat">
+    <link rel="stylesheet" href="css/style.css?v=ee7748c4b6.8.6-npc-private-chat">
     <link rel="stylesheet" href="css/floating-ui.css?v=f9232e9e67.5.100-audit-tail">
     <link rel="stylesheet" href="css/tailwind-built.css?v=c0926cfba4"><!-- 🔧 預編譯 Tailwind（取代執行期 JIT tailwind.js）：只含實際用到的 class，省 407KB runtime + 移除持續掃描 DOM 的成本。置於 style.css 之後以保留原 cascade（utility 平手時勝過自訂 class，與舊 JIT 注入順序一致） -->
 </head>
@@ -50,7 +50,7 @@
 
         <div id="login-meta-layer">
             <!-- 🏷️ 版本號（由 js/14 window.onload 依 GAME_VERSION 填入）。⚠️ 2026-09-29 加掛版：後備文字原本是上游留下的 v2.4.0，而 window.onload 要等全部圖片/音檔載完才觸發 → 玩家開頁會先看到「v2.4.0」好幾秒才跳 v3.x。改成與 js/00 GAME_VERSION 相同（站主確認原作者已停更、不再同步上游，可直接改） -->
-            <div id="login-version" class="text-center text-sm text-slate-300 font-medium tracking-wide select-none">v3.14.1</div>
+            <div id="login-version" class="text-center text-sm text-slate-300 font-medium tracking-wide select-none">v3.14.2</div>
             <div id="login-disclaimer" class="text-center text-xs text-slate-400 leading-relaxed mx-auto">本遊戲為非官方免費同人作品，絕無營利意圖；遊戲內圖片與音樂版權歸原權利方 NCSOFT 所有，其餘程式為獨立開發，嚴禁商業販售。</div>
         </div>
       </div>
@@ -559,7 +559,7 @@
     </script>
 
     <script src="js/anim-manifest.js?v=8168f3d2c7.8.12-necro-relics"></script>
-    <script src="js/00-data.js?v=34f2a6d8ec.8.34-merc-trial-class-loot"></script>
+    <script src="js/00-data.js?v=229281dc6c.8.34-merc-trial-class-loot"></script>
 <script src="js/01-drops-config.js?v=b8a9433e29.8.26-flywing-relics"></script>
 <script src="js/02-stats-recompute.js?v=57b1c87dd8.8.26-flywing-relics"></script>
     <script src="js/03-combat-core.js?v=4f6c7e0604.8.26-flywing-relics"></script>
@@ -567,13 +567,13 @@
 <script src="js/05-kill-progression.js?v=eb9a296b29.8.34-merc-trial-class-loot"></script>
     <script src="js/06-status-allies.js?v=690017ce73.8.34-merc-trial-class-loot"></script>
     <script src="js/07-skills-cast.js?v=4fd4b0a386.8.26-flywing-relics"></script>
-<script src="js/08-items-equip.js?v=f90654a076.8.16-wis-regen-interval"></script>
+<script src="js/08-items-equip.js?v=68fe191883.8.16-wis-regen-interval"></script>
 <script src="js/09-vfx-render.js?v=97b821b3ca.8.32-merc-vfx-origin"></script>
     <script src="js/10-ui-tabs.js?v=0224fda904.8.14-merc-guild"></script>
 <script src="js/11-world-map.js?v=6ab3d91e2c.8.17-item-stack-source"></script>
 <script src="js/12-npc-quests.js?v=3ca1a9154e.8.34-merc-trial-class-loot"></script>
-<script src="js/13-shop-save.js?v=a95bb3ba57.8.18-desktop-save-isolation"></script>
-<script src="js/14-craft-pandora.js?v=969fbb1ec7.8.17-item-stack-source"></script>
+<script src="js/13-shop-save.js?v=f74e86678b.8.18-desktop-save-isolation"></script>
+<script src="js/14-craft-pandora.js?v=5bdf9b2c11.8.17-item-stack-source"></script>
 <script src="js/15-cards.js?v=b1159fb025.7.66"></script>
 <script src="js/16-equip-book.js?v=b65ee3ef7a.8.15-legacy-import-smooth"></script>
 <script src="js/18-misc-book.js?v=efb9d0a866.8.15-legacy-import-smooth"></script>
@@ -619,7 +619,7 @@
     <!-- 手機版面 / 返回鍵 -->
     <script src="afk-mobile.js?v=2c98ed403f"></script>
     <script src="afk-backnav.js?v=a02389afc7"></script>
-    <script src="afk-battlehud.js?v=a9842b42d6"></script>
+    <script src="afk-battlehud.js?v=e07ed7a5c2"></script>
     <script src="afk-mapbar.js?v=048a44152b"></script>
     <script src="afk-nozoom.js?v=cf5af6ecd5"></script>
     <!-- afk-statusicon：手機狀態圖示縮小一半（純 CSS，只在窄畫面生效） -->
@@ -643,7 +643,7 @@
     <!-- 首頁公告卡（通用框架：檔頭 NOTICE 設成 null 就不顯示，要發公告時填一組設定即可） -->
     <script src="afk-notice.js?v=22a53935d8"></script>
     <!-- 版本更新內容：登入頁「📜 更新內容」＋更新後第一次開啟自動跳出（CHANGELOG 寫在檔內；發版規則見 docs/versioning.md） -->
-    <script src="afk-changelog.js?v=4ac84362fd"></script>
+    <script src="afk-changelog.js?v=9012115ef6"></script>
     <script src="afk-history.js?v=06586ebde4"></script>
     <script src="afk-reissueid.js?v=b6195567f1"></script>
     <script src="afk-diag.js?v=5a937fd41b"></script>
