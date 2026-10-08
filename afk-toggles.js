@@ -106,6 +106,7 @@
         { id: 'offline', name: '離線快速結算', desc: '關掉遊戲回來自動結算掛機收益', group: '遊戲玩法' },
         { id: 'traditional', name: '傳統模式(偽)', desc: '打到或做出來的裝備自帶隨機強化值（在選角卡右上角逐角色開關）', group: '遊戲玩法' },
         { id: 'ladder', name: '無限天梯', desc: '傲慢之塔入口的無限天梯：一層一層往上打、排行榜、天梯獎勵', group: '遊戲玩法' },
+        { id: 'achieve', name: '成就與稱號', desc: '達成目標解鎖成就、拿稱號掛在名字旁邊和天梯排行榜上（只是好看，不加能力）', group: '遊戲玩法' },
         { id: 'dograce', name: '賽狗場', desc: '賭哪隻狗第一，押金幣或龍鑽、中了自動入袋（自動化分頁開啟）', group: '遊戲玩法' },
         { id: 'anyclass', name: '裝備不限職業/性別', desc: '所有裝備都不看職業與性別，任何角色都能裝；關掉後穿不上的會自動卸回背包', group: '遊戲玩法', def: false }
     ].forEach(api.register);

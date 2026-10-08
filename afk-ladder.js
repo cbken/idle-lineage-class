@@ -665,7 +665,7 @@
     if (!key || !slot || !L || location.protocol === 'file:') return;
     if (!writeAllowed()) return;
     var body = {
-      p: slot, s: String(player.enSeed || ''), n: String(player.name || ''), c: player.cls, lv: player.lv,
+      p: slot, s: String(player.enSeed || ''), n: String(player.name || ''), ti: (typeof window.afkAchTitle === 'function' ? window.afkAchTitle() : ''), c: player.cls, lv: player.lv,
       f: L.best, t: L.bestT, wk: L.wk.id, wf: L.wk.f,
       party: (player.allies || []).filter(Boolean).map(function (a) { return a.cls; })
     };
@@ -796,7 +796,7 @@
     var rows = b.entries.slice().sort(function (x, y) { return (y.f - x.f) || (x.t - y.t); });
     var line = function (e, i) {
       return '<div class="flex gap-2 py-1 border-b border-slate-800"><span class="w-6 text-right font-bold text-yellow-300">' + (i + 1) + '</span><span class="flex-1">' +
-        '玩家' + esc(e.p) + (e.n ? '・' + esc(e.n) : '') + ' <span class="text-slate-400">' + (CLS_NAME[e.c] || e.c) + ' Lv' + esc(e.lv) + '</span></span><span class="text-cyan-300 font-bold">' + e.f + ' 層</span></div>';
+        '玩家' + esc(e.p) + (e.n ? '・' + esc(e.n) : '') + (e.ti ? ' <span style="color:#fbbf24">「' + esc(e.ti) + '」</span>' : '') + ' <span class="text-slate-400">' + (CLS_NAME[e.c] || e.c) + ' Lv' + esc(e.lv) + '</span></span><span class="text-cyan-300 font-bold">' + e.f + ' 層</span></div>';
     };
     if (tab === 'w') {
       var cw = weekId();
@@ -804,7 +804,7 @@
       if (!wr.length) return '<div class="text-slate-400 p-2">本週還沒有人上榜（本週詞綴：' + esc(affixLine(curAffixes())) + '）。</div>';
       return '<div class="text-xs text-slate-400 mb-1">本週詞綴：' + esc(affixLine(curAffixes())) + '｜週一結算，第一名下週經驗與掉寶 +10%</div>' + wr.slice(0, 50).map(function (e, i) {
         return '<div class="flex gap-2 py-1 border-b border-slate-800"><span class="w-6 text-right font-bold text-yellow-300">' + (i + 1) + '</span><span class="flex-1">' +
-          '玩家' + esc(e.p) + (e.n ? '・' + esc(e.n) : '') + ' <span class="text-slate-400">' + (CLS_NAME[e.c] || e.c) + ' Lv' + esc(e.lv) + '</span></span><span class="text-emerald-300 font-bold">' + e.wks[cw] + ' 層</span></div>';
+          '玩家' + esc(e.p) + (e.n ? '・' + esc(e.n) : '') + (e.ti ? ' <span style="color:#fbbf24">「' + esc(e.ti) + '」</span>' : '') + ' <span class="text-slate-400">' + (CLS_NAME[e.c] || e.c) + ' Lv' + esc(e.lv) + '</span></span><span class="text-emerald-300 font-bold">' + e.wks[cw] + ' 層</span></div>';
       }).join('');
     }
     if (tab === 'p') return rows.slice(0, 50).map(line).join('');
@@ -853,7 +853,7 @@
   }
 
   // 測試／平衡用（不在介面上）
-  window.__afkLadder = { floorSpec: floorSpec, bossHp: bossHp, dmgMult: dmgMult, startRun: startRun, endRun: endRun, run: function () { return run; }, data: data, championOf: championOf, weekId: weekId, weekAffixes: weekAffixes, curAffixes: curAffixes, floorTicks: floorTicks, AFFIXES: AFFIXES, forceAffixes: function (a) { _forceAffix = a; _affixCache = { wk: '', list: [] }; } };
+  window.__afkLadder = { floorSpec: floorSpec, bossHp: bossHp, dmgMult: dmgMult, startRun: startRun, endRun: endRun, run: function () { return run; }, data: data, championOf: championOf, amChampion: amChampion, pushNow: function () { var L = data(); if (L && L.best > 0) pushRecord(); }, weekId: weekId, weekAffixes: weekAffixes, curAffixes: curAffixes, floorTicks: floorTicks, AFFIXES: AFFIXES, forceAffixes: function (a) { _forceAffix = a; _affixCache = { wk: '', list: [] }; } };
 
   console.log('[AFK-ladder] hooks OK');
 })();
