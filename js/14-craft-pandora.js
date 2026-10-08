@@ -1749,7 +1749,8 @@ function startEditName() {
     window._editingName = true;
     let el = document.getElementById('st-class');
     let cur = (player.name || '').replace(/"/g, '&quot;');
-    el.innerHTML = `<input id="name-edit-input" type="text" maxlength="12" value="${cur}" `
+    el.style.whiteSpace = 'nowrap'; el.style.opacity = ''; el.style.fontSize = '';
+    el.innerHTML = `<input id="name-edit-input" type="text" maxlength="12" value="${cur}" placeholder="最多 12 字" style="background:#fff;color:#000;" `
         + `onclick="event.stopPropagation()" `
         + `onkeydown="if(event.key==='Enter'){event.preventDefault();confirmEditName();}else if(event.key==='Escape'){cancelEditName();}" `
         + `class="w-24 px-1 py-0.5 text-black text-sm rounded align-middle"> `
@@ -1759,15 +1760,21 @@ function startEditName() {
 }
 function confirmEditName() {
     let input = document.getElementById('name-edit-input');
-    let v = input ? input.value.trim() : '';
-    v = v.replace(/[<>&"']/g, '');   // 🔧 過濾 HTML 特殊字元：名稱會以 innerHTML 呈現，避免自我注入標籤
-    player.name = v ? v.slice(0, 12) : null;   // 留空則回到未取名狀態（顯示「點擊取名」）
     window._editingName = false;
+    let el = document.getElementById('st-class'); if (el) el.style.whiteSpace = '';
+    setPlayerName(input ? input.value : '');
+}
+// ✎ 共用改名入口（桌機狀態欄輸入框、手機狀態列點名字都走這裡）
+function setPlayerName(raw) {
+    let v = String(raw == null ? '' : raw).trim();
+    v = v.replace(/[<>&"']/g, '');   // 🔧 過濾 HTML 特殊字元：名稱會以 innerHTML 呈現，避免自我注入標籤
+    player.name = v ? v.slice(0, 12) : null;   // 留空則回到未取名狀態（顯示「✎ 取名」）
     updateUI();
     saveGame();
 }
 function cancelEditName() {
     window._editingName = false;
+    let el = document.getElementById('st-class'); if (el) el.style.whiteSpace = '';
     updateUI();
 }
 

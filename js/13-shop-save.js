@@ -939,6 +939,38 @@ function updateLoadInfo(){
     if(enter) enter.classList.toggle('hidden', empty);
     if(exportBtn) exportBtn.classList.toggle('hidden', empty);
     if(del) del.classList.toggle('hidden', empty);
+    const ren = document.getElementById('load-btn-rename');
+    if(ren) ren.classList.toggle('hidden', empty);
+}
+// ✎ 選角畫面改名（站主 2026-10-08）：直接改該格存檔裡的 p.name，不必先進遊戲。
+//    沿用遊戲內改名同一套規則（最多 12 字、濾掉 < > & " '、留空＝未命名）。
+function loadRenameSelected(){
+    const slot = _loadSelectedSlot;
+    const key = 'lineage_idle_save_' + slot;
+    let d;
+    try {
+        const u = _saveUnwrap(_lzGet(key));
+        if(!u || !u.ok || !u.payload){ alert('這個角色的存檔讀不到，無法改名。'); return; }
+        d = JSON.parse(u.payload);
+    } catch(e){ alert('這個角色的存檔讀不到，無法改名。'); return; }
+    if(!d || !d.p || !d.p.cls) return;
+    // 別的分頁正在玩這隻 → 那邊下次自動存檔會把名字蓋回去，請玩家去那邊改
+    try {
+        if(_roleOtherActiveSessions().some(s => s && Number(s.slot) === Number(slot))){
+            alert('這個角色正在另一個分頁遊戲中，請到那個分頁點左上角的名字改名。');
+            return;
+        }
+    } catch(e) {}
+    const raw = window.prompt('角色名稱（最多 12 字，留空＝未命名）', d.p.name || '');
+    if(raw === null) return;
+    let v = String(raw).trim().replace(/[<>&"']/g, '');
+    v = v ? v.slice(0, 12) : null;
+    if((d.p.name || null) === v) return;
+    // 舊存檔沒有 enSeed 時，角色身分指紋是用「名字」算的 → 先用舊名把種子固定下來，改名後身分不變
+    if(!d.p.enSeed) d.p.enSeed = 'es' + _seedHash((d.p.name || '') + '|' + (d.p.cls || '') + '|lz').toString(36);
+    d.p.name = v;
+    if(!_lzSet(key, _saveWrap(JSON.stringify(d)))){ alert('改名失敗（存檔寫不進去），請重新整理後再試。'); return; }
+    renderLoadSelect();
 }
 function loadSelectSlot(n){
     const sum = slotSummary(n);

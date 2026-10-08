@@ -191,7 +191,7 @@
       '#m-status .ms-row1{gap:6px 12px;flex-wrap:wrap;}',
       '#m-status .ms-seg{white-space:nowrap;}',
       /* 暱稱可能很長:限寬 + 省略號,免把整列擠爆(其餘欄位都是短數字) */
-      '#m-status #ms-name{display:inline-block;max-width:38vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;color:#fff;font-weight:bold;font-size:14px;}',
+      '#m-status #ms-name{display:inline-block;max-width:38vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;color:#fff;font-weight:bold;font-size:14px;text-decoration:underline dotted rgba(255,255,255,.45);text-underline-offset:3px;cursor:pointer;}',
       '#m-status .ms-lv,#m-status .ms-ac,#m-status .ms-mr{color:#b3a893;}',
       '#m-status #ms-lv{color:#fff;font-size:15px;}',
       '#m-status #ms-ac,#m-status #ms-mr{color:#bfdbfe;font-size:14px;}',
@@ -329,6 +329,16 @@
     window.addEventListener('orientationchange', placeStrip);
     setInterval(function () { if (!document.hidden) placeStrip(); }, 1000);   // 手機殼那支是非同步掛 body.m-mobile(還會隨轉向變) → 定期對齊一次即可,成本極低;背景分頁看不到畫面,跳過
     strip.addEventListener('click', openStatModal);   // 點整條 → 開角色資訊彈窗
+    // ✎ 點名字 → 直接改名（不開彈窗）。站主 2026-10-08：手機原本要「點狀態列→再點空白處」才改得到、根本找不到
+    var nm = strip.querySelector('.ms-name');
+    if (nm) nm.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (typeof setPlayerName !== 'function' || typeof player === 'undefined' || !player || !player.cls) { openStatModal(); return; }
+      var v = window.prompt('角色名稱（最多 12 字，留空＝不取名）', player.name || '');
+      if (v === null) return;   // 按取消
+      setPlayerName(v);
+      mirror();
+    });
     cache(strip);
     mirror();
     setInterval(function () { if (!document.hidden) mirror(); }, MIRROR_MS);   // 背景分頁鏡射純浪費;回前景下一輪(≤300ms)就補上

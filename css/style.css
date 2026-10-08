@@ -3403,3 +3403,14 @@ button.classic-skill-cell { cursor:pointer; }
 #tab-clan .clan-dip-war,    .clan-dip-war    { color: #fca5a5; }                                  /* 我方宣戰：淺紅 */
 #tab-clan .clan-dip-enemy,  .clan-dip-enemy  { color: #fca5a5; }                                  /* 對方宣戰：淺紅 */
 #tab-clan .clan-dip-mutual, .clan-dip-mutual { color: #dc2626; text-shadow: 0 0 6px rgba(220,38,38,.55); }   /* 互相宣戰：深紅＋微光 */
+
+/* ✎ 選角畫面「改名」鈕（站主 2026-10-08：要在選角時名字旁邊就能改名）：疊在名字框右端，不動原本的美術排版 */
+.load-info-row.name { position:absolute; }
+#load-btn-rename {
+    position:absolute; right:3px; top:50%; transform:translateY(-50%);
+    padding:1px 7px; font-size:12px; line-height:1.4; white-space:nowrap; cursor:pointer;
+    color:#f3d58a; background:rgba(40,28,14,.92); border:1px solid #a8823f; border-radius:3px;
+    font-family:"Microsoft JhengHei", sans-serif; z-index:2; pointer-events:auto;
+}
+#load-btn-rename:hover { color:#fff3c4; border-color:#e0b860; background:rgba(70,48,20,.95); }
+#load-btn-rename.hidden { display:none; }

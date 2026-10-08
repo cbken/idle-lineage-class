@@ -1441,7 +1441,12 @@ function _updateUIImpl() {
     if(document.getElementById('st-classname')) document.getElementById('st-classname').innerText = clsDisplayName;   // 🏅 精通徽記已移除，僅顯示職業名
     let _nameEl = document.getElementById('st-class');
     if(_nameEl) {
-        if(!window._editingName) _nameEl.innerText = (player.name || '');   // 未取名則不顯示任何文字（仍可點擊命名）
+        if(!window._editingName) {
+            // ✎ 未取名時顯示淡色「✎ 取名」提示（原本整格空白、看不出能點，站主 2026-10-08 反映改不到名字）
+            _nameEl.innerText = (player.name || '✎ 取名');
+            _nameEl.style.opacity = player.name ? '' : '0.6';
+            _nameEl.style.fontSize = player.name ? '' : '0.85rem';
+        }
         if (typeof pvpAlignmentColor === 'function') {
             _nameEl.style.color = pvpAlignmentColor(player.alignmentValue);
             _nameEl.style.textShadow = '0 0 6px rgba(0,0,0,.75)';
