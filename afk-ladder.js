@@ -298,6 +298,19 @@
     if (!run) return;
     var r = run; run = null;
     closeHud();
+    if (r.mode === 'wb') {
+      if (inLadder()) {
+        swapAllKeys(mapState, r.backup || SAFE_MS);
+        (mapState.mobs || []).forEach(function (m, i) { if (m && m._ladder) mapState.mobs[i] = null; });
+        player.dead = false;
+        try { document.getElementById('btn-revive').classList.add('hidden'); } catch (e) {}
+        try { var ip0 = document.getElementById('btn-revive-inplace'); if (ip0) ip0.classList.add('hidden'); } catch (e) {}
+        try { window.setMapSelectors('town_pride'); window.changeMap(true); } catch (e) { try { window.returnToTown(); } catch (e2) {} }
+      }
+      wbEnd(r, reason);
+      refreshUi(); save();
+      return;
+    }
     var sameChar = player && (String(player.enSeed || '') + '|' + player.name) === r.seed;
     var L = sameChar ? data() : null;   // 中途換角色＝這輪作廢，不能把紀錄記到新角色身上
     var result = { wkGoal: r.wkGoal, capped: !!r.capped, reason: reason, start: r.start, reached: r.floor, cleared: r.cleared, clearedT: r.clearedT, newBest: false, gained: r.gained, coins: r.coins };
@@ -375,6 +388,7 @@
     for (var i = 0; i < mobs.length; i++) {
       var m = mobs[i], b = before[i];
       if (!m || !b || m.uid !== b.uid) continue;
+      if (wbAfterTick(i, m, b)) continue;
       if (b.ladder && m.curHp > b.hp) m.curHp = b.hp;                 // 天梯怪不自然回血（頭目回血會讓高樓層變成打不動的牆）
       if (b.ladder && run && !m._dead && m.curHp > 0) {
         if (wkHas('valor') && m.curHp < b.hp) {                        // 🗓️ 鬥志：補打 20%
@@ -395,6 +409,11 @@
       player.hp = Math.min(player.mhp, player.hp + Math.floor(bossDmg * (0.01 + 0.002 * elv)));
     }
     if (!run || !inLadder()) return;
+    if (run.mode === 'wb') {   // 🐉 世界頭目：只看時間
+      if (state.ticks - run.floorAt >= WB_TICKS) { if (!ff()) log('<span class="text-amber-300 font-bold">🐉 時間到！</span>'); endRun('time'); return; }
+      if (!ff() && state.ticks % 5 === 0) updateHud();
+      return;
+    }
     // 天梯流程
     if (run.nextAt) {
       if (state.ticks >= run.nextAt) spawnFloor(run.floor + 1);
@@ -411,6 +430,7 @@
   var _origKillMob = window.killMob;
   window.killMob = function (idx) {
     var mob = mapState.mobs ? mapState.mobs[idx] : null;
+    if (mob && mob._wb && !mob._dead) { wbOnKill(mob); return; }
     if (!mob || !mob._ladder || mob._dead) return _origKillMob.apply(this, arguments);
     mob._dead = true;
     if (mob.curHp > 0) mob.curHp = 0;
@@ -457,7 +477,7 @@
   // 傷害倍率：天梯中依樓層
   if (typeof window.riftDamageMult === 'function') {
     var _origRDM = window.riftDamageMult;
-    window.riftDamageMult = function () { if (run && inLadder()) return dmgMult(run.floor) * (wkHas('fury') ? 1.3 : 1); return _origRDM.apply(this, arguments); };
+    window.riftDamageMult = function () { if (run && inLadder()) return run.mode === 'wb' ? wbDmgMult(run.wbTier) : dmgMult(run.floor) * (wkHas('fury') ? 1.3 : 1); return _origRDM.apply(this, arguments); };
   }
 
   // 天梯中不出一般怪、不能瞬移/迷魅（會把天梯怪清掉）
@@ -485,7 +505,7 @@
   window.killPlayer = function () {
     if (run && inLadder()) {
       player.hp = 0;
-      if (!ff()) log('<span class="text-red-400 font-bold">🗼 你在第 ' + run.floor + ' 層倒下了（無限天梯：死亡沒有任何損失）。</span>');
+      if (!ff()) log(run.mode === 'wb' ? '<span class="text-red-400 font-bold">🐉 你倒下了（世界頭目：死亡沒有任何損失，傷害照算）。</span>' : '<span class="text-red-400 font-bold">🗼 你在第 ' + run.floor + ' 層倒下了（無限天梯：死亡沒有任何損失）。</span>');
       player.statuses = { stun: 0, freeze: 0, stone: 0, poison: 0, poisonDmg: 0, poisonTick: 0, burn: 0, burnDmg: 0, burnTick: 0, scald: 0, scaldDmg: 0, scaldTick: 0, bleed: 0, bleedDmg: 0, bleedTick: 0, sleep: 0, silence: 0, paralyze: 0, magicseal: 0, armorBreak: 0, slowAtk: 0, cleave: 0, evilAura: 0 };
       endRun('dead');
       return;
@@ -681,6 +701,184 @@
     return best > 0 ? { week: pw, floor: best, players: players } : null;
   }
 
+
+  // ===== 🐉 世界頭目（站主 2026-10-08「有趣的玩法再做進去」第 3 項） =====
+  // 每週一換一隻，兩個玩家共用一條血（Worker /wboss 累計傷害）；每角色每天挑戰 WB_TRIES 次、每次 WB_TICKS。
+  // 本機的頭目血條＝「共用剩餘血量」近似值，打穿就當場換下一次討伐的血條（以伺服器累計為準）。
+  // 傷害用血量差計（_wbJump 補回打穿時灌回去的血），世界頭目不吃天梯詞綴（run.affix=[]）。
+  var WB_EP = 'https://idle-lineage-cloudsave.cbken.workers.dev/wboss';
+  var WB_TICKS = 1800;              // 每次挑戰 3 分鐘
+  var WB_TRIES = 3;                 // 每角色每天 3 次
+  var WB_HP_BASE = 5e7;             // 第 1 次討伐 5000 萬（10/8 實測：王族 Lv109＋7 傭兵 3 分鐘打 120~290 萬；兩個玩家每天各 3 場 → 約 3~4 天打倒第一次）
+  var WB_HP_GROW = 1.5;             // 每多討伐一次血量 ×1.5
+  var WB_DMG_BASE = 4;              // 世界頭目的傷害基礎倍率（10/8 實測王族 Lv109 滿隊：×2.5 全都不痛、×6 法利昂 100 秒就倒；頭目之間差很多＝每週要換打法）
+  var WB_DMG_GROW = 1.15;           // 每多討伐一次怪物傷害 ×1.15
+  var WB_CACHE_KEY = 'afk_wb_state', WB_PENDING_KEY = 'afk_wb_pending';
+  var WB_BOSSES = ['antaras', 'fafurion', 'lindvior', 'valakas', 'sr_gashadokuro', 'sanct_dantes'];
+  var WB_BOSS_DMG = { sanct_dantes: 0.5 };   // 個別頭目傷害再乘（丹特斯原版爆發高，×4 時玩家2 Lv 角色 26 秒就倒，10/8 實測）
+  var _wbForce = null;   // 測試用
+  var WB_KILL_REWARD = [{ id: 'afk_ladder_protect', n: 2 }, { id: 'afk_ladder_reroll', n: 1 }, { id: 'afk_ladder_eyestone', n: 3 }];
+  function wbBossId(wk) {
+    if (_wbForce) return _wbForce;
+    var list = WB_BOSSES.filter(function (id) { return DB.mobs[id]; });
+    var m = /^(\d{4})-W(\d{2})$/.exec(wk || weekId()), n = m ? (+m[1]) * 53 + (+m[2]) : 0;   // 照週次輪流（每隻都會輪到）
+    return list[n % list.length];
+  }
+  function wbTierOf(total) {   // 累計傷害 → { tier:正在打第幾次, into:這次已打掉, hp:這次血量, kills:已討伐次數 }
+    var t = 1, hp = WB_HP_BASE, left = Math.max(0, total || 0);
+    while (left >= hp && t < 200) { left -= hp; t++; hp = Math.round(hp * WB_HP_GROW); }
+    return { tier: t, into: left, hp: hp, kills: t - 1 };
+  }
+  function wbDmgMult(tier) { return WB_DMG_BASE * (WB_BOSS_DMG[wbBossId(run && run.wkId)] || 1) * Math.pow(WB_DMG_GROW, Math.max(0, (tier || 1) - 1)); }
+  function wbCache() { try { var c = JSON.parse(localStorage.getItem(WB_CACHE_KEY) || 'null'); return c && c.data && c.data.wk === weekId() ? c.data : null; } catch (e) { return null; } }
+  function wbSetCache(d) { try { localStorage.setItem(WB_CACHE_KEY, JSON.stringify({ at: Date.now(), data: d })); } catch (e) {} }
+  function wbLocal() { return wbCache() || { wk: weekId(), total: 0, ents: [], prev: null }; }
+  function wbData() {   // 角色自己的世界頭目紀錄（跟著存檔）
+    var L = data(); if (!L) return null;
+    var today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+    if (!L.wb || typeof L.wb !== 'object') L.wb = {};
+    var W = L.wb;
+    if (W.day !== today) { W.day = today; W.n = 0; }
+    if (W.wk !== weekId()) { W.wk = weekId(); W.d = 0; W.claimed = 0; }
+    if (!(W.kc >= 0)) W.kc = 0;
+    return W;
+  }
+  function wbLoad() {
+    var key = cloudKey(); if (!key || location.protocol === 'file:') return Promise.resolve(wbCache());
+    return wbFlush().then(function () {
+      return fetchT(WB_EP + '?key=' + encodeURIComponent(key) + '&_=' + Date.now())
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { if (d && d.wk) wbSetCache(d); return wbCache(); })
+        .catch(function () { return wbCache(); });
+    });
+  }
+  function wbPending() { try { return JSON.parse(localStorage.getItem(WB_PENDING_KEY) || '[]') || []; } catch (e) { return []; } }
+  function wbSetPending(a) { try { localStorage.setItem(WB_PENDING_KEY, JSON.stringify(a.slice(-20))); } catch (e) {} }
+  function wbFlush() {   // 送出還沒送成功的傷害（離線/網路斷的那幾場）
+    var key = cloudKey(), q = wbPending();
+    if (!key || !q.length || location.protocol === 'file:') return Promise.resolve();
+    var body = q[0];
+    return fetchT(WB_EP + '?key=' + encodeURIComponent(key), { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return null; }).then(function (d) { return { st: r.status, d: d }; }); })
+      .then(function (x) {
+        if (x.d && x.d.wk) wbSetCache(x.d);
+        if (x.st === 200 || x.st === 400 || x.st === 409) { wbSetPending(wbPending().slice(1)); return wbFlush(); }   // 成功或永遠不會成功的 → 拿掉
+      })
+      .catch(function () {});
+  }
+  function wbSubmit(dmg) {
+    if (!(dmg > 0)) return Promise.resolve();
+    var q = wbPending();
+    q.push({ p: cloudSlot(), s: String(player.enSeed || ''), n: String(player.name || ''), c: player.cls, lv: player.lv, wk: weekId(), d: Math.floor(dmg) });
+    wbSetPending(q);
+    // 先在本機快取加上去（離線也看得到進度），伺服器回來再蓋掉
+    var c = wbLocal(); c.total = (c.total || 0) + Math.floor(dmg); wbSetCache(c);
+    return wbFlush();
+  }
+  function wbClaim() {   // 已討伐的次數裡，這個角色本週有出手過 → 每討伐一次領一份
+    var W = wbData(); if (!W || !(W.d > 0)) return [];
+    var t = wbTierOf(wbLocal().total), got = [];
+    while ((W.claimed || 0) < t.kills) {
+      W.claimed = (W.claimed || 0) + 1; W.kc++;
+      WB_KILL_REWARD.forEach(function (g) { window.gainItem(g.id, g.n, true, true); });
+      got.push(W.claimed);
+    }
+    if (got.length) {
+      log('<span class="text-orange-300 font-bold">🐉 世界頭目第 ' + got.join('、') + ' 次討伐獎勵：' + WB_KILL_REWARD.map(function (g) { return esc(DB.items[g.id].n) + ' ×' + (g.n * got.length); }).join('、') + '</span>');
+      save();
+    }
+    return got;
+  }
+  function startWb() {
+    if (!player || !player.cls) return;
+    if (inLadder() || run) return;
+    if (player.dead) { alert('你已倒下，先復活再來。'); return; }
+    if (!cloudKey()) { alert('要開雲端存檔才能打世界頭目（血量是大家共用的）。'); return; }
+    var W = wbData(); if (W.n >= WB_TRIES) { alert('今天的挑戰次數用完了，明天再來。'); return; }
+    W.n++;
+    var id = wbBossId(), base = DB.mobs[id], st = wbTierOf(wbLocal().total);
+    var msSnap = {}; for (var k in mapState) msSnap[k] = mapState[k];
+    run = { mode: 'wb', affix: [], wkId: weekId(), seed: String(player.enSeed || '') + '|' + player.name, start: 0, floor: 0, floorAt: state.ticks, nextAt: 0, floorTicks: WB_TICKS, cleared: 0, clearedT: 0, backup: msSnap, gained: {}, coins: 0, wbDmg: 0, wbTier: st.tier, wbBreaks: 0 };
+    mapState.current = LADDER_MAP;
+    mapState.forceBoss = false;
+    mapState.suppressSiegeBoss = true;
+    refillTeam(1);
+    try { window.calcStats(); } catch (e) {}
+    showBattleView();
+    mapState.mobs = [null, null, null, null, null];
+    mapState.spawnAt = [null, null, null, null, null];
+    var inst = Object.assign({}, base, {
+      hp: st.hp, curHp: Math.max(1, st.hp - st.into), uid: window.uid(),
+      _born: (typeof _mobBornSeq !== 'undefined') ? ++_mobBornSeq : Date.now(), _bornMs: Date.now(),
+      _magCd: {}, justHit: false, st: window.newMobStatus(),
+      exp: 0, goldMin: 0, goldMax: 0, _ladder: true, _wb: true, transformTo: null
+    });
+    if (base.hard && typeof window.initHardSkin === 'function') window.initHardSkin(inst);
+    mapState.mobs[1] = inst;
+    mapState.targetIdx = -1;
+    save();
+    if (!ff()) {
+      log('<span class="text-orange-300 font-bold">🐉 世界頭目：' + esc(base.n) + '（第 ' + st.tier + ' 次討伐）— 3 分鐘內盡量打，傷害會加進大家共用的血條。</span>');
+      try { window.renderMobs(); } catch (e) {}
+    }
+    openHud();
+  }
+  function wbAfterTick(i, m, b) {   // 回傳 true＝這隻是世界頭目、已處理
+    if (!m._wb) return false;
+    var top = b.hp + (m._wbJump || 0);
+    m._wbJump = 0;
+    if (m.curHp > top) m.curHp = top;   // 不回血
+    var dealt = top - m.curHp;
+    if (dealt > 0 && run && run.mode === 'wb') {
+      var eye = player.eq && player.eq.eye;
+      if (eye && eye.id === 'afk_eye_king') {   // 天梯王魔眼對世界頭目也有效
+        var extra = Math.floor(dealt * (0.15 + 0.01 * Math.min(10, Math.max(0, eye.en || 0))));
+        if (extra > 0) { dealt += extra; m.curHp = Math.max(1, m.curHp - extra); }
+      }
+      run.wbDmg += dealt;
+      if (eye && eye.id === 'afk_eye_devour' && player.hp < player.mhp) player.hp = Math.min(player.mhp, player.hp + Math.floor(dealt * (0.01 + 0.002 * Math.min(10, Math.max(0, eye.en || 0)))));
+    }
+    return true;
+  }
+  function wbOnKill(mob) {   // 本機血條打穿：當場換成下一次討伐的血條（不讓頭目真的死掉）
+    var over = Math.max(0, -(mob.curHp || 0));
+    var nhp = Math.round(mob.hp * WB_HP_GROW);
+    mob._wbJump = (mob._wbJump || 0) + nhp;
+    mob.hp = nhp; mob.curHp = Math.max(1, nhp - over);
+    if (run && run.mode === 'wb') {
+      run.wbBreaks++; run.wbTier++;
+      if (!ff()) log('<span class="text-orange-300 font-bold">🐉 擊破！' + esc(mob.n) + ' 倒下又站了起來（第 ' + run.wbTier + ' 次討伐，以伺服器結算為準）</span>');
+    }
+  }
+  function wbFmt(n) { n = Math.max(0, Math.floor(n || 0)); return n >= 1e8 ? (n / 1e8).toFixed(2) + ' 億' : n >= 1e4 ? (n / 1e4).toFixed(1) + ' 萬' : String(n); }
+  function wbEnd(r, reason) {   // endRun 的世界頭目分支：送傷害、發獎勵、回報
+    var sameChar = player && (String(player.enSeed || '') + '|' + player.name) === r.seed;
+    var dmg = Math.floor(r.wbDmg || 0), gained = {};
+    if (sameChar && dmg > 0 && r.wkId === weekId()) {
+      var W = wbData(); W.d = (W.d || 0) + dmg; W.best = Math.max(W.best || 0, dmg);
+      var tier0 = wbTierOf(wbLocal().total).hp;
+      var stones = 1 + (dmg >= tier0 * 0.05 ? 1 : 0);   // 每次挑戰：魔眼強化石 1（打掉這次討伐血量 5% 以上再 +1）
+      window.gainItem('afk_ladder_eyestone', stones, true, true); gained.afk_ladder_eyestone = stones;
+      wbSubmit(dmg).then(function () {
+        var got = wbClaim();
+        showWbResult({ reason: reason, dmg: dmg, gained: gained, claimed: got });
+      });
+      return;
+    }
+    if (reason !== 'left') showWbResult({ reason: reason, dmg: dmg, gained: gained, claimed: [], void: !sameChar || r.wkId !== weekId() });
+  }
+  function showWbResult(x) {
+    if (x.reason === 'left') return;
+    var why = { time: '時間到', dead: '倒下', retreat: '撤退' }[x.reason] || '';
+    var c = wbLocal(), t = wbTierOf(c.total);
+    var html = '<div style="font-size:15px;line-height:1.8">這次造成 <b style="color:#fdba74;font-size:20px">' + wbFmt(x.dmg) + '</b> 傷害<span style="color:#94a3b8">（' + why + '）</span>' +
+      (x.void ? '<br><span style="color:#94a3b8">（中途換角色或跨週，這場不計）</span>' : '') +
+      '<br>' + esc((DB.mobs[wbBossId()] || {}).n || '') + ' 第 ' + t.tier + ' 次討伐：剩 ' + wbFmt(t.hp - t.into) + ' / ' + wbFmt(t.hp) +
+      (gainedText(x.gained) ? '<br><span style="color:#67e8f9">獲得：' + esc(gainedText(x.gained)) + '</span>' : '') +
+      (x.claimed && x.claimed.length ? '<br><b style="color:#fdba74">🎉 討伐成功！領到第 ' + x.claimed.join('、') + ' 次討伐獎勵</b>' : '') + '</div>';
+    modal('🐉 世界頭目', html);
+  }
+
   // ===== 介面 =====
   var HUD_ID = 'afk-ladder-hud';
   function openHud() {
@@ -696,6 +894,14 @@
   function updateHud() {
     var h = document.getElementById(HUD_ID); if (!h || !run) return;
     var left = run.nextAt ? 0 : Math.max(0, (run.floorTicks || FLOOR_TICKS) - (state.ticks - run.floorAt));
+    if (run.mode === 'wb') {
+      h.innerHTML = '🐉 ' + esc((DB.mobs[wbBossId(run.wkId)] || {}).n || '世界頭目') + '<span style="font-size:12px;color:#fdba74">第 ' + run.wbTier + ' 次討伐</span>' +
+        '<span style="color:#fdba74">本次 ' + wbFmt(run.wbDmg) + '</span>' +
+        '<span style="color:' + (left < 300 ? '#f87171' : '#fde68a') + '">⏱ ' + Math.ceil(left / 10) + ' 秒</span>' +
+        '<button id="afk-ladder-retreat" style="border:1px solid #64748b;border-radius:6px;padding:0 8px;background:#1e293b;color:#cbd5e1;font-size:12px">撤退</button>';
+      var b0 = document.getElementById('afk-ladder-retreat'); if (b0) b0.onclick = function () { endRun('retreat'); };
+      return;
+    }
     var sp = specialOf(run.floor);
     h.innerHTML = '🗼 第 ' + run.floor + ' 層' + (run.floor % 10 !== 0 && run.floor % 5 === 0 && wkHas('bossrush') ? '（頭目）' : '') + '<span style="font-size:12px">' + affixLine(run.affix || [], true) + '</span>' + (sp ? '<span style="color:#fca5a5">' + SPECIAL_NAME[sp] + '</span>' : '') +
       '<span style="color:' + (left < 150 ? '#f87171' : '#fde68a') + '">⏱ ' + (run.nextAt ? '上樓中…' : Math.ceil(left / 10) + ' 秒') + '</span>' +
@@ -836,6 +1042,47 @@
   }
   window.afkLadderOpen = openPanel;
 
+  function renderWbPanel(container) {
+    var W = wbData();
+    if (!W) { container.innerHTML = '<div class="p-3 text-slate-300">請先載入角色。</div>'; return; }
+    wbClaim();
+    var id = wbBossId(), base = DB.mobs[id] || {}, c = wbLocal(), t = wbTierOf(c.total);
+    var pct = Math.max(0, Math.min(100, (t.hp - t.into) / t.hp * 100));
+    var h = '<div class="p-2 text-sm" style="line-height:1.7">';
+    h += '<div class="rounded-lg p-3 mb-2" style="background:rgba(67,20,7,.55);border:1px solid #c2410c">' +
+      '<div class="flex items-center gap-3">' + (base.img ? '<img src="' + esc(base.img) + '" style="width:64px;height:64px;object-fit:contain;image-rendering:pixelated" onerror="this.style.display=\'none\'">' : '') +
+      '<div class="flex-1"><div class="font-bold" style="color:#fdba74;font-size:16px">🐉 ' + esc(base.n || id) + '</div>' +
+      '<div class="text-slate-300">本週（' + esc(weekId()) + '）第 <b class="text-yellow-300">' + t.tier + '</b> 次討伐｜已討伐 ' + t.kills + ' 次</div></div></div>' +
+      '<div class="mt-2" style="height:14px;background:#1e293b;border-radius:7px;overflow:hidden;border:1px solid #7c2d12"><div style="height:100%;width:' + pct.toFixed(1) + '%;background:linear-gradient(90deg,#dc2626,#f97316)"></div></div>' +
+      '<div class="text-xs text-slate-300 mt-1">剩 ' + wbFmt(t.hp - t.into) + ' / ' + wbFmt(t.hp) + '（兩個玩家共用一條血，每週一換一隻）</div>' +
+      '</div>';
+    h += '<div class="bg-slate-900/70 border border-slate-700 rounded-lg p-3 mb-2">' +
+      '<div>今天還能挑戰 <b class="text-yellow-300">' + Math.max(0, WB_TRIES - W.n) + '</b> / ' + WB_TRIES + ' 次（每次 3 分鐘，倒下也照算傷害）</div>' +
+      '<div>我本週傷害 <b class="text-orange-300">' + wbFmt(W.d) + '</b>' + (W.best ? '　單場最高 ' + wbFmt(W.best) : '') + '</div>' +
+      '<div class="text-xs text-slate-400">每次挑戰：魔眼強化石 ×1（打掉這次討伐血量 5% 以上 ×2）<br>每討伐成功一次，本週有出手的角色都領：' + WB_KILL_REWARD.map(function (g) { return esc(DB.items[g.id].n) + ' ×' + g.n; }).join('、') + '<br>頭目每多討伐一次：血量 ×1.5、傷害 ×1.15</div>' +
+      '</div>';
+    var can = W.n < WB_TRIES && !!cloudKey();
+    h += '<button class="w-full btn py-3 font-bold mb-2" style="' + (can ? 'background:#7c2d12;border-color:#ea580c;color:#ffedd5' : 'background:#1e293b;border-color:#334155;color:#64748b') + '" data-wb="go"' + (can ? '' : ' disabled') + '>' + (cloudKey() ? (can ? '⚔️ 挑戰世界頭目' : '今天的次數用完了') : '要開雲端存檔才能挑戰') + '</button>';
+    var ents = (c.ents || []).slice().sort(function (a, z) { return z.d - a.d; });
+    h += '<div class="font-bold text-orange-200 mb-1">本週傷害排行</div>' + (ents.length ? ents.slice(0, 20).map(function (e, i) {
+      return '<div class="flex gap-2 py-1 border-b border-slate-800"><span class="w-6 text-right font-bold text-yellow-300">' + (i + 1) + '</span><span class="flex-1">玩家' + esc(e.p) + (e.n ? '・' + esc(e.n) : '') + ' <span class="text-slate-400">' + (CLS_NAME[e.c] || e.c) + ' Lv' + esc(e.lv) + '・' + (e.k || 0) + ' 場</span></span><span class="text-orange-300 font-bold">' + wbFmt(e.d) + '</span></div>';
+    }).join('') : '<div class="text-slate-400">本週還沒有人出手。</div>');
+    if (c.prev && c.prev.total > 0) {
+      var pt = wbTierOf(c.prev.total);
+      h += '<div class="text-xs text-slate-400 mt-2">上週（' + esc(c.prev.wk) + '）' + esc((DB.mobs[wbBossId(c.prev.wk)] || {}).n || '') + '：討伐 ' + pt.kills + ' 次' + ((c.prev.top || []).length ? '，傷害第一 玩家' + esc(c.prev.top[0].p) + (c.prev.top[0].n ? '・' + esc(c.prev.top[0].n) : '') : '') + '</div>';
+    }
+    h += '</div>';
+    container.innerHTML = h;
+    var go = container.querySelector('[data-wb="go"]');
+    if (go) go.onclick = function () { try { if (typeof window.closeTownFloatWindow === 'function') window.closeTownFloatWindow(); } catch (e) {} closeModalBox(); startWb(); };
+  }
+  function openWbPanel() {
+    var draw = function (container) { renderWbPanel(container); wbLoad().then(function () { if (container.isConnected) renderWbPanel(container); }); };
+    if (typeof window.openTownFloatWindow === 'function') window.openTownFloatWindow('世界頭目', '共同討伐', draw);
+    else { var w = modal('🐉 世界頭目', ''); draw(w.querySelector('.afk-ladder-body')); }
+  }
+  window.afkWbOpen = openWbPanel;
+
   // 入口：傲慢之塔入口視窗底部加一顆鈕
   if (typeof window.renderPrideEntrance === 'function') {
     var _origRPE = window.renderPrideEntrance;
@@ -847,13 +1094,19 @@
         b.textContent = '🗼 無限天梯（排行榜挑戰）';
         b.onclick = openPanel;
         (container || document.getElementById('interaction-content')).appendChild(b);
+        var b2 = document.createElement('button');
+        b2.className = 'w-full btn py-3 mt-2 font-bold';
+        b2.style.cssText = 'background:#431407;border-color:#ea580c;color:#fed7aa';
+        b2.textContent = '🐉 世界頭目（大家一起打）';
+        b2.onclick = openWbPanel;
+        (container || document.getElementById('interaction-content')).appendChild(b2);
       } catch (e) {}
       return r;
     };
   }
 
   // 測試／平衡用（不在介面上）
-  window.__afkLadder = { floorSpec: floorSpec, bossHp: bossHp, dmgMult: dmgMult, startRun: startRun, endRun: endRun, run: function () { return run; }, data: data, championOf: championOf, amChampion: amChampion, pushNow: function () { var L = data(); if (L && L.best > 0) pushRecord(); }, weekId: weekId, weekAffixes: weekAffixes, curAffixes: curAffixes, floorTicks: floorTicks, AFFIXES: AFFIXES, forceAffixes: function (a) { _forceAffix = a; _affixCache = { wk: '', list: [] }; } };
+  window.__afkLadder = { floorSpec: floorSpec, bossHp: bossHp, dmgMult: dmgMult, startRun: startRun, endRun: endRun, run: function () { return run; }, data: data, championOf: championOf, amChampion: amChampion, pushNow: function () { var L = data(); if (L && L.best > 0) pushRecord(); }, weekId: weekId, wb: { start: startWb, tierOf: wbTierOf, bossId: wbBossId, data: wbData, local: wbLocal, setCache: wbSetCache, claim: wbClaim, open: openWbPanel, force: function (id) { _wbForce = id; } }, weekAffixes: weekAffixes, curAffixes: curAffixes, floorTicks: floorTicks, AFFIXES: AFFIXES, forceAffixes: function (a) { _forceAffix = a; _affixCache = { wk: '', list: [] }; } };
 
   console.log('[AFK-ladder] hooks OK');
 })();

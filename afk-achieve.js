@@ -62,6 +62,8 @@
     ladA('lad25', 25, '登塔者', 1), ladA('lad50', 50, '天梯勇者', 2), ladA('lad75', 75, '雲端行者', 3), ladA('lad100', 100, '天梯之王', 4),
     { id: 'wk3', g: '天梯', n: '週週勤勉', d: '同一週拿到 3 個週目標（通過 60 層）', t: '週週勤勉', r: 3, v: function () { var w = lad().wg; return (w && w.got) ? w.got.length : 0; }, need: 3 },
     { id: 'champ', g: '天梯', n: '週冠軍', d: '成為天梯週冠軍（上週最高樓層）', t: '週冠軍', r: 4, v: function () { return A().champ ? 1 : 0; }, need: 1 },
+    { id: 'wb1', g: '天梯', n: '世界頭目討伐', d: '參與並討伐世界頭目 1 次', t: '屠神者', r: 3, v: function () { return (lad().wb || {}).kc || 0; }, need: 1 },
+    { id: 'wb10', g: '天梯', n: '傳說討伐隊', d: '參與並討伐世界頭目 10 次', t: '傳說討伐隊', r: 4, v: function () { return (lad().wb || {}).kc || 0; }, need: 10 },
     goldA('g8', 1e8, '1 億', '小富翁', 1), goldA('g9', 1e9, '10 億', '大富豪', 2), goldA('g10', 1e10, '100 億', '富可敵國', 3),
     { id: 'card100', g: '收藏', n: '卡片達人', d: '100 張卡片收集到滿分', t: '卡片達人', r: 1, v: card100, need: 100 },
     { id: 'card400', g: '收藏', n: '卡片大師', d: '400 張卡片收集到滿分', t: '卡片大師', r: 3, v: card100, need: 400 },
