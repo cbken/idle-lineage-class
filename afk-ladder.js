@@ -16,6 +16,9 @@
  *   ④ 天梯幣＋商店
  *   ⑤ 週冠軍（上週最高樓層的玩家）：該玩家所有角色經驗 +10%、掉寶 ×1.1
  * 排行榜：Worker /ladder（同雲端存檔的家族金鑰），只在破紀錄時寫一筆；讀取快取 60 秒。
+ * 🗓️ 每週詞綴（站主 2026-10-08「有趣的玩法再做進去」）：每週一（台灣時間 ISO 週）依週次決定論抽 2 個刁難＋1 個好處，
+ *   兩個玩家同一組；週榜＝本週最高樓層（Worker 早就按週存 wks，不用改 Worker）。
+ *   週目標：本週通過 20/40/60/80 層各領一次（WK_GOALS），每週重置。
  */
 (function () {
   'use strict';
@@ -49,6 +52,54 @@
   var HP_GROWTH = 1.08;             // 50 層以後每層血量 ×1.08
   var DMG_GROWTH = 1.05;            // 第 40 層以後怪物傷害每層 ×1.05
   var NORMAL_HP_SHARE = 1 / 6;      // 一般層每隻怪＝同層頭目血量 1/6（共 3 隻）
+
+  // ===== 🗓️ 每週詞綴 =====
+  var AFFIXES = {
+    fury:     { k: 'hard',  n: '狂暴',   d: '怪物傷害 ×1.3' },
+    bulk:     { k: 'hard',  n: '肉盾',   d: '怪物血量 ×1.6，每層時限 +20 秒' },
+    rush:     { k: 'hard',  n: '急行',   d: '每層時限只有 40 秒' },
+    nobreath: { k: 'hard',  n: '連戰',   d: '上樓時不回血魔' },
+    regen:    { k: 'hard',  n: '再生',   d: '怪物每秒回復 0.5% 血量' },
+    hide:     { k: 'hard',  n: '硬皮',   d: '所有怪物 物理／魔法 抗性 40%' },
+    thorns:   { k: 'hard',  n: '荊棘',   d: '所有怪物反彈 10% 傷害給你（每秒最多扣 1.5% 血）' },
+    bossrush: { k: 'hard',  n: '頭目潮', d: '每 5 層就是一隻頭目（原本每 10 層）' },
+    valor:    { k: 'bonus', n: '鬥志',   d: '隊伍對天梯怪的傷害 +20%' },
+    breath:   { k: 'bonus', n: '喘息',   d: '上樓時回 50% 血魔（原本 20%）' },
+    calm:     { k: 'bonus', n: '從容',   d: '每層時限 +20 秒' }
+  };
+  var WK_GOALS = [   // 本週通過這些樓層各領一次（每週重置）
+    { f: 20, id: 'afk_ladder_protect', n: 1 },
+    { f: 40, id: 'afk_ladder_reroll', n: 1 },
+    { f: 60, id: 'afk_ladder_eyestone', n: 2 },
+    { f: 80, id: 'afk_ladder_protect', n: 2 }
+  ];
+  var HIDE_PCT = 0.4, THORNS_PCT = 0.1, THORNS_CAP_PER_TICK = 0.0015, REGEN_PER_TICK = 0.0005;   // 再生每秒 0.5%（1% 時 50 層頭目永遠打不死，10/8 實測）
+  var _forceAffix = null;   // 測試用：__afkLadder.forceAffixes([...])
+  function strHash(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function weekAffixes(wk) {
+    if (_forceAffix) return _forceAffix.slice();
+    var r = rng(strHash('afk-ladder-affix|' + (wk || weekId())));
+    var hard = Object.keys(AFFIXES).filter(function (k) { return AFFIXES[k].k === 'hard'; });
+    var bonus = Object.keys(AFFIXES).filter(function (k) { return AFFIXES[k].k === 'bonus'; });
+    var a = hard.splice(Math.floor(r() * hard.length), 1)[0];
+    if (a === 'rush') hard = hard.filter(function (k) { return k !== 'bulk'; });   // 急行＋肉盾 時限互相抵消，不同週出
+    if (a === 'bulk') hard = hard.filter(function (k) { return k !== 'rush'; });
+    var b = hard[Math.floor(r() * hard.length)];
+    var c = bonus[Math.floor(r() * bonus.length)];
+    return [a, b, c];
+  }
+  var _affixCache = { wk: '', list: [] };
+  function curAffixes() {   // 一輪開始時鎖定（跨週一凌晨爬到一半不會突然換規則）
+    if (run && run.affix) return run.affix;
+    var wk = weekId();
+    if (_affixCache.wk !== wk || _forceAffix) _affixCache = { wk: wk, list: weekAffixes(wk) };
+    return _affixCache.list;
+  }
+  function wkHas(id) { return curAffixes().indexOf(id) >= 0; }
+  function floorTicks() { return FLOOR_TICKS + (wkHas('bulk') ? 200 : 0) + (wkHas('calm') ? 200 : 0) - (wkHas('rush') ? 200 : 0); }
+  function affixLine(ids, html) {
+    return ids.filter(function (k) { return AFFIXES[k]; }).map(function (k) { var a = AFFIXES[k]; return html ? '<span style="color:' + (a.k === 'bonus' ? '#86efac' : '#fca5a5') + '">' + (a.k === 'bonus' ? '✚' : '✖') + esc(a.n) + '</span>' : a.n; }).join(html ? ' ' : '、');
+  }
 
   var CLS_NAME = { knight: '騎士', royal: '王族', warrior: '戰士', elf: '妖精', mage: '法師', dark: '黑暗妖精', illusion: '幻術士', dragon: '龍騎士' };
 
@@ -158,7 +209,7 @@
   var reflectTick = -1, reflectUsed = 0;
   function floorSpec(f) {
     if (!POOLS) buildPools();
-    var r = rng(f * 7919 + 13), lv = floorLv(f), boss = (f % 10 === 0);
+    var r = rng(f * 7919 + 13), lv = floorLv(f), boss = (f % 10 === 0) || (wkHas('bossrush') && f % 5 === 0);
     var ids = boss ? [pickFrom(POOLS.bosses, lv, r, 8)] : [pickFrom(POOLS.normals, lv, r, 6), pickFrom(POOLS.normals, lv, r, 6), pickFrom(POOLS.normals, lv, r, 6)];
     return { f: f, boss: boss, ids: ids, hp: boss ? bossHp(f) : Math.max(100, Math.round(bossHp(f) * NORMAL_HP_SHARE)), sp: specialOf(f) };
   }
@@ -170,6 +221,7 @@
 
   function spawnFloor(f) {
     var spec = floorSpec(f);
+    if (wkHas('bulk')) spec.hp = Math.round(spec.hp * 1.6);
     mapState.mobs = [null, null, null, null, null];
     mapState.spawnAt = [null, null, null, null, null];
     var slotsIdx = spec.boss ? [1] : [1, 0, 2];
@@ -183,11 +235,12 @@
       });
       if (spec.f > 70) { inst.ac = (inst.ac || 0) - Math.floor((spec.f - 70) / 2); inst.mr = (inst.mr || 0) + (spec.f - 70); }
       if (spec.sp) { inst._ladderSp = spec.sp; inst._reflectWall = { kind: 'ladder', until: 1e15, block: true }; }
+      if (wkHas('hide') || wkHas('thorns')) { inst._ladderWk = true; if (!inst._reflectWall) inst._reflectWall = { kind: 'ladder', until: 1e15, block: true }; }
       if (base.hard && typeof window.initHardSkin === 'function') window.initHardSkin(inst);
       mapState.mobs[slotsIdx[i]] = inst;
     });
     mapState.targetIdx = -1;
-    run.floor = f; run.floorAt = state.ticks; run.nextAt = 0;
+    run.floor = f; run.floorAt = state.ticks; run.nextAt = 0; run.floorTicks = floorTicks();
     if (!ff()) {
       log('<span class="text-cyan-300 font-bold">🗼 無限天梯 第 ' + f + ' 層' + (spec.boss ? '（頭目）' : '') + (spec.sp ? '｜<span class="text-red-300">' + SPECIAL_NAME[spec.sp] + '</span>' : '') + '</span>');
       try { window.renderMobs(); } catch (e) {}
@@ -205,7 +258,7 @@
     if (inLadder() || run) return;
     if (player.dead) { alert('你已倒下，先復活再來。'); return; }
     var msSnap = {}; for (var k in mapState) msSnap[k] = mapState[k];
-    run = { seed: String(player.enSeed || '') + '|' + player.name, start: fromFloor, floor: fromFloor, floorAt: 0, nextAt: 0, cleared: 0, clearedT: 0, backup: msSnap, gained: {}, coins: 0 };
+    run = { affix: weekAffixes(weekId()), wkId: weekId(), seed: String(player.enSeed || '') + '|' + player.name, start: fromFloor, floor: fromFloor, floorAt: 0, nextAt: 0, cleared: 0, clearedT: 0, backup: msSnap, gained: {}, coins: 0 };
     mapState.current = LADDER_MAP;
     mapState.forceBoss = false;
     mapState.suppressSiegeBoss = true;
@@ -247,7 +300,7 @@
     closeHud();
     var sameChar = player && (String(player.enSeed || '') + '|' + player.name) === r.seed;
     var L = sameChar ? data() : null;   // 中途換角色＝這輪作廢，不能把紀錄記到新角色身上
-    var result = { capped: !!r.capped, reason: reason, start: r.start, reached: r.floor, cleared: r.cleared, clearedT: r.clearedT, newBest: false, gained: r.gained, coins: r.coins };
+    var result = { wkGoal: r.wkGoal, capped: !!r.capped, reason: reason, start: r.start, reached: r.floor, cleared: r.cleared, clearedT: r.clearedT, newBest: false, gained: r.gained, coins: r.coins };
     if (L && r.cleared > 0) {
       if (r.cleared > L.best || (r.cleared === L.best && r.clearedT < L.bestT)) { result.newBest = r.cleared > L.best; L.best = r.cleared; L.bestT = r.clearedT; }
       var wk = weekId();
@@ -279,10 +332,22 @@
     if (coins === 0) run.capped = true;
     if (f > L.first) { grantFirstClear(f); L.first = f; }
     if (!ff()) log('<span class="text-cyan-200">🗼 第 ' + f + ' 層通過（' + (used / 10).toFixed(1) + ' 秒）' + (coins ? '＋天梯幣 ' + coins : '（今天的天梯幣已拿滿）') + '</span>');
+    grantWeekGoals(L, f);
     run.nextAt = state.ticks + GAP_TICKS;
-    refillTeam(GAP_HEAL);
+    refillTeam(wkHas('nobreath') ? 0 : (wkHas('breath') ? 0.5 : GAP_HEAL));
   }
 
+  function grantWeekGoals(L, f) {
+    var wk = run.wkId || weekId();
+    if (!L.wg || L.wg.id !== wk) L.wg = { id: wk, got: [] };
+    WK_GOALS.forEach(function (g) {
+      if (f < g.f || L.wg.got.indexOf(g.f) >= 0) return;
+      L.wg.got.push(g.f);
+      window.gainItem(g.id, g.n, true, true); addGain(g.id, g.n);
+      run.wkGoal = (run.wkGoal || []).concat([g.f]);
+      if (!ff()) log('<span class="text-emerald-300 font-bold">🗓️ 週目標達成：本週通過 ' + g.f + ' 層 → ' + esc(DB.items[g.id].n) + ' ×' + g.n + '</span>');
+    });
+  }
   function addGain(id, n) { run.gained[id] = (run.gained[id] || 0) + n; }
   function grantFirstClear(f) {
     if (f % 10 === 0) { var n = 1 + Math.floor(f / 50); window.gainItem('afk_ladder_protect', n, true, true); addGain('afk_ladder_protect', n); }
@@ -311,6 +376,13 @@
       var m = mobs[i], b = before[i];
       if (!m || !b || m.uid !== b.uid) continue;
       if (b.ladder && m.curHp > b.hp) m.curHp = b.hp;                 // 天梯怪不自然回血（頭目回血會讓高樓層變成打不動的牆）
+      if (b.ladder && run && !m._dead && m.curHp > 0) {
+        if (wkHas('valor') && m.curHp < b.hp) {                        // 🗓️ 鬥志：補打 20%
+          var vx = Math.floor((b.hp - m.curHp) * 0.2);
+          if (vx > 0) { m.curHp -= vx; if (m.curHp <= 0) { m.curHp = 0; try { window.killMob(i); if (!state.inTick && typeof window.settleDeadMobs === 'function') window.settleDeadMobs(); } catch (e) {} continue; } }
+        }
+        if (wkHas('regen') && m.curHp < m.hp) m.curHp = Math.min(m.hp, m.curHp + Math.max(1, Math.floor(m.hp * REGEN_PER_TICK)));   // 🗓️ 再生
+      }
       if (b.boss && !m._dead && m.curHp < b.hp) {
         var dealt = b.hp - m.curHp; bossDmg += dealt;
         if (eid === 'afk_eye_king') {                                  // 天梯王魔眼：補打 15%+1%/級
@@ -328,7 +400,7 @@
       if (state.ticks >= run.nextAt) spawnFloor(run.floor + 1);
     } else if (!ladderMobsAlive()) {
       clearFloor();
-    } else if (state.ticks - run.floorAt >= FLOOR_TICKS) {
+    } else if (state.ticks - run.floorAt >= (run.floorTicks || FLOOR_TICKS)) {
       if (!ff()) log('<span class="text-amber-300 font-bold">🗼 時間到！停在第 ' + run.floor + ' 層。</span>');
       endRun('time'); return;
     }
@@ -350,9 +422,21 @@
   if (typeof window.reflectWallOnDamage === 'function') {
     var _origRW = window.reflectWallOnDamage, _spLogAt = 0;
     window.reflectWallOnDamage = function (mob, dmg, kind, ally) {
-      if (!mob || !mob._ladderSp) return _origRW.apply(this, arguments);
+      if (!mob || !(mob._ladderSp || mob._ladderWk)) return _origRW.apply(this, arguments);
       if (!(dmg > 0) || mob._dead) return;
       var sp = mob._ladderSp;
+      if (mob._ladderWk && run) {
+        if (wkHas('hide') && (kind === 'melee' || kind === 'ranged' || kind === 'magic') && !((sp === 'phys' && kind !== 'magic') || (sp === 'magic' && kind === 'magic'))) {
+          mob.curHp = Math.min(mob.hp, mob.curHp + Math.floor(dmg * HIDE_PCT));
+        }
+        if (wkHas('thorns') && sp !== 'reflect') {
+          if (reflectTick !== state.ticks) { reflectTick = state.ticks; reflectUsed = 0; }
+          var tc = Math.floor((player.mhp || 0) * THORNS_CAP_PER_TICK);
+          var tr = Math.min(Math.max(1, Math.floor(dmg * THORNS_PCT)), Math.max(0, tc - reflectUsed));
+          if (tr > 0) { reflectUsed += tr; player.hp -= tr; if (player.hp <= 0) { window.killPlayer(); return; } }
+        }
+        if (!sp) return;
+      }
       if ((sp === 'phys' && (kind === 'melee' || kind === 'ranged')) || (sp === 'magic' && kind === 'magic')) {
         mob.curHp = Math.min(mob.hp, mob.curHp + Math.floor(dmg * RESIST_PCT));
         var now = Date.now();
@@ -373,7 +457,7 @@
   // 傷害倍率：天梯中依樓層
   if (typeof window.riftDamageMult === 'function') {
     var _origRDM = window.riftDamageMult;
-    window.riftDamageMult = function () { if (run && inLadder()) return dmgMult(run.floor); return _origRDM.apply(this, arguments); };
+    window.riftDamageMult = function () { if (run && inLadder()) return dmgMult(run.floor) * (wkHas('fury') ? 1.3 : 1); return _origRDM.apply(this, arguments); };
   }
 
   // 天梯中不出一般怪、不能瞬移/迷魅（會把天梯怪清掉）
@@ -611,9 +695,9 @@
   }
   function updateHud() {
     var h = document.getElementById(HUD_ID); if (!h || !run) return;
-    var left = run.nextAt ? 0 : Math.max(0, FLOOR_TICKS - (state.ticks - run.floorAt));
+    var left = run.nextAt ? 0 : Math.max(0, (run.floorTicks || FLOOR_TICKS) - (state.ticks - run.floorAt));
     var sp = specialOf(run.floor);
-    h.innerHTML = '🗼 第 ' + run.floor + ' 層' + (sp ? '<span style="color:#fca5a5">' + SPECIAL_NAME[sp] + '</span>' : '') +
+    h.innerHTML = '🗼 第 ' + run.floor + ' 層' + (run.floor % 10 !== 0 && run.floor % 5 === 0 && wkHas('bossrush') ? '（頭目）' : '') + '<span style="font-size:12px">' + affixLine(run.affix || [], true) + '</span>' + (sp ? '<span style="color:#fca5a5">' + SPECIAL_NAME[sp] + '</span>' : '') +
       '<span style="color:' + (left < 150 ? '#f87171' : '#fde68a') + '">⏱ ' + (run.nextAt ? '上樓中…' : Math.ceil(left / 10) + ' 秒') + '</span>' +
       '<button id="afk-ladder-retreat" style="border:1px solid #64748b;border-radius:6px;padding:0 8px;background:#1e293b;color:#cbd5e1;font-size:12px">撤退</button>';
     var b = document.getElementById('afk-ladder-retreat'); if (b) b.onclick = function () { endRun('retreat'); };
@@ -645,7 +729,8 @@
       (r.cleared > 0 ? '通過第 <b style="color:#fde68a;font-size:20px">' + r.cleared + '</b> 層' + (r.newBest ? ' <b style="color:#f472b6">新紀錄！</b>' : '') : '這次沒有通過任何一層') +
       '<br><span style="color:#94a3b8">停在第 ' + r.reached + ' 層（' + why + '）</span>' +
       (r.coins ? '<br>天梯幣 +' + r.coins : '') + (r.capped ? '<br><span style="color:#94a3b8">今天的天梯幣已拿滿（每天 ' + COIN_DAY_CAP + '），明天再來</span>' : '') +
-      (gainedText(r.gained) ? '<br><span style="color:#67e8f9">首通獎勵：' + esc(gainedText(r.gained)) + '</span>' : '') + '</div>';
+      (r.wkGoal && r.wkGoal.length ? '<br><span style="color:#6ee7b7">🗓️ 週目標達成：' + r.wkGoal.join('、') + ' 層</span>' : '') +
+      (gainedText(r.gained) ? '<br><span style="color:#67e8f9">獲得：' + esc(gainedText(r.gained)) + '</span>' : '') + '</div>';
     modal('🗼 無限天梯', html);
   }
 
@@ -672,10 +757,21 @@
       (nextMilestone(L.first) ? '<div class="text-slate-400">下個首通獎勵：' + esc(nextMilestone(L.first)) + '</div>' : '') +
       (champ ? '<div class="text-amber-300">👑 本週天梯之王：玩家' + champ.players.join('、玩家') + '（上週 ' + champ.floor + ' 層）' + (champ.players.indexOf(me) >= 0 ? '— 你這週經驗 +10%、掉寶 +10%' : '') + '</div>' : '') +
       '</div>';
+    var wkA = curAffixes(), wg = (L.wg && L.wg.id === weekId()) ? L.wg.got : [];
+    var wkMine = (L.wk && L.wk.id === weekId()) ? L.wk.f : 0;
+    h += '<div class="bg-slate-900/70 border border-emerald-700/60 rounded-lg p-3 mb-2">' +
+      '<div class="text-emerald-300 font-bold">🗓️ 本週詞綴（' + esc(weekId()) + '，每週一換）</div>' +
+      wkA.filter(function (k) { return AFFIXES[k]; }).map(function (k) { var a = AFFIXES[k]; return '<div><b style="color:' + (a.k === 'bonus' ? '#86efac' : '#fca5a5') + '">' + (a.k === 'bonus' ? '✚ ' : '✖ ') + esc(a.n) + '</b> <span class="text-slate-300">' + esc(a.d) + '</span></div>'; }).join('') +
+      '<div class="mt-1">本週最高 <b class="text-yellow-300">' + wkMine + '</b> 層　週目標：' + WK_GOALS.map(function (g) {
+        var ok = wg.indexOf(g.f) >= 0;
+        return '<span title="' + esc(DB.items[g.id].n + ' ×' + g.n) + '" style="color:' + (ok ? '#6ee7b7' : '#94a3b8') + '">' + (ok ? '✔' : '○') + g.f + '</span>';
+      }).join(' ') + '</div>' +
+      '<div class="text-xs text-slate-400">20 層不爆卷、40 層重抽石、60 層魔眼強化石×2、80 層不爆卷×2（每週可再領）</div>' +
+      '</div>';
     h += '<div class="grid grid-cols-2 gap-2 mb-2">' +
       '<button class="btn border-cyan-600 bg-cyan-900 hover:bg-cyan-800 py-3 font-bold text-cyan-100" data-act="start1">從第 1 層開始</button>' +
       '<button class="btn border-cyan-600 bg-cyan-900 hover:bg-cyan-800 py-3 font-bold text-cyan-100" data-act="startHi"' + (startHi <= 1 ? ' disabled style="opacity:.5"' : '') + '>從第 ' + startHi + ' 層開始</button></div>';
-    h += '<div class="flex gap-1 mb-2">' + [['me', '商店'], ['p', '個人榜'], ['c', '職業榜'], ['t', '隊伍榜']].map(function (x) {
+    h += '<div class="flex gap-1 mb-2">' + [['me', '商店'], ['w', '週榜'], ['p', '總榜'], ['c', '職業榜'], ['t', '隊伍榜']].map(function (x) {
       return '<button class="btn flex-1 py-1 ' + (tab === x[0] ? 'border-cyan-400 text-cyan-300' : 'border-slate-600 text-slate-300') + ' bg-slate-800" data-tab="' + x[0] + '">' + x[1] + '</button>';
     }).join('') + '</div><div id="afk-ladder-tab">' + renderTab(L) + '</div></div>';
     container.innerHTML = h;
@@ -702,6 +798,15 @@
       return '<div class="flex gap-2 py-1 border-b border-slate-800"><span class="w-6 text-right font-bold text-yellow-300">' + (i + 1) + '</span><span class="flex-1">' +
         '玩家' + esc(e.p) + (e.n ? '・' + esc(e.n) : '') + ' <span class="text-slate-400">' + (CLS_NAME[e.c] || e.c) + ' Lv' + esc(e.lv) + '</span></span><span class="text-cyan-300 font-bold">' + e.f + ' 層</span></div>';
     };
+    if (tab === 'w') {
+      var cw = weekId();
+      var wr = b.entries.filter(function (e) { return e.wks && e.wks[cw] > 0; }).sort(function (x, y) { return y.wks[cw] - x.wks[cw]; });
+      if (!wr.length) return '<div class="text-slate-400 p-2">本週還沒有人上榜（本週詞綴：' + esc(affixLine(curAffixes())) + '）。</div>';
+      return '<div class="text-xs text-slate-400 mb-1">本週詞綴：' + esc(affixLine(curAffixes())) + '｜週一結算，第一名下週經驗與掉寶 +10%</div>' + wr.slice(0, 50).map(function (e, i) {
+        return '<div class="flex gap-2 py-1 border-b border-slate-800"><span class="w-6 text-right font-bold text-yellow-300">' + (i + 1) + '</span><span class="flex-1">' +
+          '玩家' + esc(e.p) + (e.n ? '・' + esc(e.n) : '') + ' <span class="text-slate-400">' + (CLS_NAME[e.c] || e.c) + ' Lv' + esc(e.lv) + '</span></span><span class="text-emerald-300 font-bold">' + e.wks[cw] + ' 層</span></div>';
+      }).join('');
+    }
     if (tab === 'p') return rows.slice(0, 50).map(line).join('');
     if (tab === 'c') {
       return Object.keys(CLS_NAME).map(function (c) {
@@ -748,7 +853,7 @@
   }
 
   // 測試／平衡用（不在介面上）
-  window.__afkLadder = { floorSpec: floorSpec, bossHp: bossHp, dmgMult: dmgMult, startRun: startRun, endRun: endRun, run: function () { return run; }, data: data, championOf: championOf, weekId: weekId };
+  window.__afkLadder = { floorSpec: floorSpec, bossHp: bossHp, dmgMult: dmgMult, startRun: startRun, endRun: endRun, run: function () { return run; }, data: data, championOf: championOf, weekId: weekId, weekAffixes: weekAffixes, curAffixes: curAffixes, floorTicks: floorTicks, AFFIXES: AFFIXES, forceAffixes: function (a) { _forceAffix = a; _affixCache = { wk: '', list: [] }; } };
 
   console.log('[AFK-ladder] hooks OK');
 })();
