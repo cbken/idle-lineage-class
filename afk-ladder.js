@@ -122,6 +122,8 @@
     afk_eye_king: { n: '天梯王魔眼', type: 'acc', slot: 'eye', req: 'all', safe: 0, noEnhance: true, maxEn: 10, legend: true, p: 0, noSell: true, noJunk: true, gachaWeight: 0,
       d: '隊伍對頭目的傷害 +15%（每 +1 再 +1%）。無限天梯 100 層首通獎勵。' }
   };
+  NEW_ITEMS.afk_evt_map = { n: '神秘藏寶圖', type: 'etc', eff: 'afk_evt_map', p: 0, c: 'text-amber-300', noSell: true, noJunk: true, gachaWeight: 0,
+    d: '離線掛機時撿到的藏寶圖。在村莊使用：帶隊進入限時 60 秒的寶藏小副本（3 波寶藏守衛），打越多拿越多金幣，全清再加碼寶物。' };
   Object.keys(NEW_ITEMS).forEach(function (id) { if (!DB.items[id]) DB.items[id] = NEW_ITEMS[id]; });
   try { if (typeof WH_NO_STORE !== 'undefined' && WH_NO_STORE.push) Object.keys(NEW_ITEMS).forEach(function (id) { if (WH_NO_STORE.indexOf(id) < 0) WH_NO_STORE.push(id); }); } catch (e) {}
 
@@ -298,16 +300,16 @@
     if (!run) return;
     var r = run; run = null;
     closeHud();
-    if (r.mode === 'wb') {
+    if (r.mode === 'wb' || r.mode === 'tm') {
       if (inLadder()) {
         swapAllKeys(mapState, r.backup || SAFE_MS);
         (mapState.mobs || []).forEach(function (m, i) { if (m && m._ladder) mapState.mobs[i] = null; });
         player.dead = false;
         try { document.getElementById('btn-revive').classList.add('hidden'); } catch (e) {}
         try { var ip0 = document.getElementById('btn-revive-inplace'); if (ip0) ip0.classList.add('hidden'); } catch (e) {}
-        try { window.setMapSelectors('town_pride'); window.changeMap(true); } catch (e) { try { window.returnToTown(); } catch (e2) {} }
+        try { window.setMapSelectors(r.mode === 'tm' && r.fromMap ? r.fromMap : 'town_pride'); window.changeMap(true); } catch (e) { try { window.returnToTown(); } catch (e2) {} }
       }
-      wbEnd(r, reason);
+      if (r.mode === 'tm') tmEnd(r, reason); else wbEnd(r, reason);
       refreshUi(); save();
       return;
     }
@@ -409,6 +411,13 @@
       player.hp = Math.min(player.mhp, player.hp + Math.floor(bossDmg * (0.01 + 0.002 * elv)));
     }
     if (!run || !inLadder()) return;
+    if (run.mode === 'tm') {   // 🗺️ 藏寶圖：清光一波出下一波，3 波清完或時間到結束
+      if (!ladderMobsAlive()) { (mapState.mobs || []).forEach(function (m) { if (m && m._tm) tmOnKill(m); });   // 沒走 killMob 死掉的也算
+        if (run.wave >= TM_WAVES) { endRun('clear'); return; } tmWave(); }
+      else if (state.ticks - run.floorAt >= TM_TICKS) { if (!ff()) log('<span class="text-amber-300 font-bold">🗺️ 時間到，寶藏守衛帶著剩下的寶物跑了！</span>'); endRun('time'); return; }
+      if (!ff() && state.ticks % 5 === 0) updateHud();
+      return;
+    }
     if (run.mode === 'wb') {   // 🐉 世界頭目：只看時間
       if (state.ticks - run.floorAt >= WB_TICKS) { if (!ff()) log('<span class="text-amber-300 font-bold">🐉 時間到！</span>'); endRun('time'); return; }
       if (!ff() && state.ticks % 5 === 0) updateHud();
@@ -432,6 +441,7 @@
     var mob = mapState.mobs ? mapState.mobs[idx] : null;
     if (mob && mob._wb && !mob._dead) { wbOnKill(mob); return; }
     if (!mob || !mob._ladder || mob._dead) return _origKillMob.apply(this, arguments);
+    if (mob._tm) tmOnKill(mob);
     mob._dead = true;
     if (mob.curHp > 0) mob.curHp = 0;
     if (!ff()) { try { window.vfxKill(mob); } catch (e) {} try { window.playMobKill(mob); } catch (e) {} try { window.renderMobs(); } catch (e) {} }
@@ -609,6 +619,7 @@
       var d = it && DB.items[it.id];
       if (inLadder() && it && it.id === 'scroll_teleport') return;
       if (d && (d.eff === 'afk_ladder_reroll' || d.eff === 'afk_ladder_eyestone')) { openPicker(d.eff); return; }
+      if (d && d.eff === 'afk_evt_map') { startTm(); return; }
       return _origUse.apply(this, arguments);
     };
   }
@@ -879,6 +890,169 @@
     modal('🐉 世界頭目', html);
   }
 
+  // ===== 🎲 離線隨機事件＋🗺️ 藏寶圖小副本（站主 2026-10-08「有趣的玩法再做進去」第 4 項） =====
+  // 離線結算完（__afk.busy() 由 true 變 false）讀最新一筆離線紀錄：每結算 1 小時擲一次（最多 6 次、滿 30 分鐘至少 1 次），
+  // 每次 EVT_CHANCE 機率發生一件事：藏寶圖（進背包，村莊使用→限時小副本）、流浪商人（金幣換天梯道具，關視窗就走）、路邊寶箱（金幣＋機率魔眼強化石）。
+  // 同一段離線（closeTs）只擲一次：記在 player.evt.last。
+  var EVT_CHANCE = 0.3, EVT_MAX_ROLLS = 6;
+  var EVT_TABLE = [{ k: 'map', w: 4 }, { k: 'merchant', w: 2 }, { k: 'chest', w: 3 }];
+  var MERCHANT_OFFERS = [
+    { id: 'afk_ladder_protect', n: 1, price: 50000000 },
+    { id: 'afk_ladder_reroll', n: 1, price: 80000000 },
+    { id: 'afk_ladder_eyestone', n: 2, price: 60000000 }
+  ];
+  var TM_TICKS = 600, TM_WAVES = 3;
+  var TM_BONUS = [{ id: 'afk_ladder_protect', n: 1 }, { id: 'afk_ladder_reroll', n: 1 }, { id: 'afk_ladder_eyestone', n: 2 }];
+  function evtData() {
+    if (typeof player === 'undefined' || !player || !player.cls) return null;
+    if (!player.evt || typeof player.evt !== 'object') player.evt = {};
+    return player.evt;
+  }
+  function tmData() { var L = data(); if (!L) return null; if (!L.tm || typeof L.tm !== 'object') L.tm = { n: 0, clr: 0 }; return L.tm; }
+  function evtRoll(settledMs, rnd) {
+    rnd = rnd || Math.random;
+    var hrs = settledMs / 3600000; if (hrs < 0.5) return [];
+    var rolls = Math.min(EVT_MAX_ROLLS, Math.max(1, Math.floor(hrs))), out = [], tw = 0;
+    EVT_TABLE.forEach(function (e) { tw += e.w; });
+    for (var i = 0; i < rolls; i++) {
+      if (rnd() >= EVT_CHANCE) continue;
+      var x = rnd() * tw;
+      for (var j = 0; j < EVT_TABLE.length; j++) { x -= EVT_TABLE[j].w; if (x < 0) { out.push(EVT_TABLE[j].k); break; } }
+    }
+    return out;
+  }
+  function evtApply(list) {   // 發放 → 回傳要顯示的條目
+    var E = evtData(), lines = [], merchantShown = false;
+    list.forEach(function (k) {
+      if (k === 'map') { window.gainItem('afk_evt_map', 1, true, true); lines.push({ k: k, t: '🗺️ 在草叢裡撿到一張<b class="text-amber-300">神秘藏寶圖</b>（已放進背包，回村莊使用就能出發尋寶）' }); }
+      else if (k === 'chest') {
+        var g = Math.round((player.lv || 1) * 50000 * (0.6 + Math.random() * 0.8));
+        player.gold += g;
+        var st = Math.random() < 0.3;
+        if (st) window.gainItem('afk_ladder_eyestone', 1, true, true);
+        lines.push({ k: k, t: '🎁 路邊有個沒人要的寶箱：金幣 <b class="text-yellow-300">+' + g.toLocaleString() + '</b>' + (st ? '、' + esc(DB.items.afk_ladder_eyestone.n) + ' ×1' : '') });
+      } else if (k === 'merchant' && !merchantShown) {
+        merchantShown = true;
+        var o = MERCHANT_OFFERS[Math.floor(Math.random() * MERCHANT_OFFERS.length)];
+        E.offer = { id: o.id, n: o.n, price: o.price, until: Date.now() + 24 * 3600000 };
+        lines.push({ k: k, t: '🧳 遇到一位<b class="text-emerald-300">流浪商人</b>，願意用 ' + o.price.toLocaleString() + ' 金幣賣你 ' + esc(DB.items[o.id].n) + ' ×' + o.n + '（關掉這個視窗他就走了）', offer: true });
+      }
+    });
+    return lines;
+  }
+  function offerHtml() {
+    var E = evtData(), o = E && E.offer;
+    if (!o || o.until < Date.now() || !DB.items[o.id]) return '';
+    var can = (player.gold || 0) >= o.price;
+    return '<div class="mt-2 p-2 rounded" style="background:rgba(6,78,59,.4);border:1px solid #059669">🧳 流浪商人：' + esc(DB.items[o.id].n) + ' ×' + o.n + '　<b class="text-yellow-300">' + o.price.toLocaleString() + '</b> 金幣' +
+      '<div class="flex gap-2 mt-1"><button class="btn flex-1 py-1 font-bold" data-offer="buy" ' + (can ? 'style="background:#065f46;border-color:#10b981;color:#d1fae5"' : 'disabled style="opacity:.5"') + '>' + (can ? '買' : '金幣不夠') + '</button>' +
+      '<button class="btn flex-1 py-1" data-offer="no" style="background:#1e293b;border-color:#475569;color:#cbd5e1">不用了</button></div></div>';
+  }
+  function bindOffer(root, after) {
+    root.querySelectorAll('[data-offer]').forEach(function (b) {
+      b.onclick = function () {
+        var E = evtData(), o = E && E.offer; if (!o) return;
+        if (b.getAttribute('data-offer') === 'buy') {
+          if (o.until < Date.now() || (player.gold || 0) < o.price) return;
+          player.gold -= o.price; window.gainItem(o.id, o.n, true, true);
+          log('<span class="text-emerald-300">🧳 跟流浪商人買了 ' + esc(DB.items[o.id].n) + ' ×' + o.n + '（−' + o.price.toLocaleString() + ' 金幣）</span>');
+        }
+        delete E.offer; refreshUi(); save(); if (after) after();
+      };
+    });
+  }
+  function showEvents(lines, hrs) {
+    var html = '<div style="font-size:14px;line-height:1.9">離線 ' + hrs.toFixed(1) + ' 小時期間發生了：' +
+      lines.map(function (l) { return '<div>' + l.t + '</div>'; }).join('') + '<div class="afk-evt-offer">' + offerHtml() + '</div></div>';
+    var w = modal('🎲 離線奇遇', html);
+    var box = w.querySelector('.afk-evt-offer');
+    bindOffer(box, function () { box.innerHTML = '<div class="text-slate-400 mt-1">商人揮揮手走了。</div>'; });
+    var cl = function () { var E = evtData(); if (E && E.offer) { delete E.offer; save(); } };   // 關視窗＝不買
+    w.querySelector('#afk-ladder-close').addEventListener('click', cl);
+    w.addEventListener('click', function (e) { if (e.target === w) cl(); });
+  }
+  var _wasBusy = false;
+  function evtPoll() {
+    var busy = !!(window.__afk && __afk.busy && __afk.busy());
+    if (_wasBusy && !busy) { try { evtAfterSettle(); } catch (e) { console.warn('[AFK-ladder] 離線事件', e); } }
+    _wasBusy = busy;
+  }
+  function evtAfterSettle() {
+    var E = evtData(); if (!E || !window.__afk || !__afk.histKey) return;
+    var arr; try { arr = JSON.parse(localStorage.getItem(__afk.histKey()) || '[]'); } catch (e) { arr = []; }
+    var rec = Array.isArray(arr) && arr[0]; if (!rec || !rec.closeTs || E.last === rec.closeTs) return;
+    E.last = rec.closeTs;
+    var list = evtRoll(rec.settledMs || 0);
+    if (!list.length) { save(); return; }
+    var lines = evtApply(list);
+    lines.forEach(function (l) { log('<span class="text-amber-200">🎲 離線奇遇：' + l.t + '</span>'); });
+    refreshUi(); save();
+    setTimeout(function () { showEvents(lines, (rec.settledMs || 0) / 3600000); }, 1200);
+  }
+  setInterval(evtPoll, 1000);
+
+  function tmFloor() { var L = data(); var byLv = Math.max(5, Math.min(45, (player.lv || 1) - 64)); return Math.max(5, Math.min(60, Math.max(byLv, (L && L.best ? L.best - 5 : 0)))); }
+  function startTm() {
+    if (!player || !player.cls) return;
+    if (inLadder() || run) { alert('天梯／世界頭目進行中，結束後再用。'); return; }
+    if (player.dead) { alert('你已倒下，先復活再來。'); return; }
+    if (!/^town_/.test(mapState.current || '')) { alert('藏寶圖要在村莊裡使用。'); return; }
+    if (!takeItem('afk_evt_map', 1)) return;
+    var T = tmData(); T.n++;
+    var msSnap = {}; for (var k in mapState) msSnap[k] = mapState[k];
+    run = { mode: 'tm', affix: [], wkId: weekId(), seed: String(player.enSeed || '') + '|' + player.name, start: 0, floor: tmFloor(), floorAt: state.ticks, nextAt: 0, floorTicks: TM_TICKS, cleared: 0, clearedT: 0, backup: msSnap, gained: {}, coins: 0, wave: 0, tmKills: 0, tmGold: 0, fromMap: mapState.current };
+    mapState.current = LADDER_MAP;
+    mapState.forceBoss = false;
+    mapState.suppressSiegeBoss = true;
+    refillTeam(1);
+    try { window.calcStats(); } catch (e) {}
+    showBattleView();
+    tmWave();
+    save();
+    openHud();
+  }
+  function tmWave() {
+    run.wave++;
+    var f = run.floor + run.wave, spec = floorSpec(f), r = rng(Date.now() & 0xffffff);
+    if (!POOLS) buildPools();
+    var hp = Math.max(200, Math.round(bossHp(f) / 10));
+    mapState.mobs = [null, null, null, null, null];
+    mapState.spawnAt = [null, null, null, null, null];
+    [1, 0, 2].forEach(function (slot, i) {
+      var id = pickFrom(POOLS.normals, floorLv(f), r, 6), base = DB.mobs[id]; if (!base) return;
+      var inst = Object.assign({}, base, {
+        n: '寶藏守衛・' + base.n, hp: hp, curHp: hp, uid: window.uid(),
+        _born: (typeof _mobBornSeq !== 'undefined') ? ++_mobBornSeq : Date.now(), _bornMs: Date.now(),
+        _magCd: {}, justHit: false, st: window.newMobStatus(),
+        exp: 0, goldMin: 0, goldMax: 0, _ladder: true, _tm: true
+      });
+      if (base.hard && typeof window.initHardSkin === 'function') window.initHardSkin(inst);
+      mapState.mobs[slot] = inst;
+    });
+    mapState.targetIdx = -1;
+    if (!ff()) { log('<span class="text-amber-300 font-bold">🗺️ 寶藏守衛 第 ' + run.wave + ' / ' + TM_WAVES + ' 波</span>'); try { window.renderMobs(); } catch (e) {} }
+  }
+  function tmOnKill(mob) {
+    if (!run || run.mode !== 'tm' || !mob || mob._tmPaid) return;
+    mob._tmPaid = true;
+    var g = Math.round((player.lv || 1) * 20000 * (1 + 0.25 * (run.wave - 1)));
+    run.tmKills++; run.tmGold += g; player.gold += g;
+  }
+  function tmEnd(r, reason) {
+    var T = tmData(), gained = {};
+    var full = reason === 'clear';
+    if (full) {
+      T.clr = (T.clr || 0) + 1;
+      var b = TM_BONUS[Math.floor(Math.random() * TM_BONUS.length)];
+      window.gainItem(b.id, b.n, true, true); gained[b.id] = b.n;
+    }
+    if (reason === 'left') return;
+    var why = { clear: '全部清光！', time: '時間到', dead: '倒下', retreat: '撤退' }[reason] || '';
+    modal('🗺️ 寶藏小副本', '<div style="font-size:15px;line-height:1.8">打倒寶藏守衛 <b style="color:#fde68a;font-size:20px">' + r.tmKills + '</b> / ' + (TM_WAVES * 3) + ' 隻<span style="color:#94a3b8">（' + why + '）</span>' +
+      '<br>金幣 <b class="text-yellow-300">+' + (r.tmGold || 0).toLocaleString() + '</b>' +
+      (gainedText(gained) ? '<br><span style="color:#fbbf24">🎉 全清寶物：' + esc(gainedText(gained)) + '</span>' : '<br><span style="color:#94a3b8">（60 秒內打完 3 波可以多拿一件寶物）</span>') + '</div>');
+  }
+
   // ===== 介面 =====
   var HUD_ID = 'afk-ladder-hud';
   function openHud() {
@@ -894,6 +1068,13 @@
   function updateHud() {
     var h = document.getElementById(HUD_ID); if (!h || !run) return;
     var left = run.nextAt ? 0 : Math.max(0, (run.floorTicks || FLOOR_TICKS) - (state.ticks - run.floorAt));
+    if (run.mode === 'tm') {
+      h.innerHTML = '🗺️ 寶藏小副本<span style="font-size:12px;color:#fde68a">第 ' + run.wave + ' / ' + TM_WAVES + ' 波</span><span style="color:#fde68a">金幣 +' + wbFmt(run.tmGold) + '</span>' +
+        '<span style="color:' + (left < 150 ? '#f87171' : '#fde68a') + '">⏱ ' + Math.ceil(left / 10) + ' 秒</span>' +
+        '<button id="afk-ladder-retreat" style="border:1px solid #64748b;border-radius:6px;padding:0 8px;background:#1e293b;color:#cbd5e1;font-size:12px">撤退</button>';
+      var b1 = document.getElementById('afk-ladder-retreat'); if (b1) b1.onclick = function () { endRun('retreat'); };
+      return;
+    }
     if (run.mode === 'wb') {
       h.innerHTML = '🐉 ' + esc((DB.mobs[wbBossId(run.wkId)] || {}).n || '世界頭目') + '<span style="font-size:12px;color:#fdba74">第 ' + run.wbTier + ' 次討伐</span>' +
         '<span style="color:#fdba74">本次 ' + wbFmt(run.wbDmg) + '</span>' +
@@ -1106,7 +1287,7 @@
   }
 
   // 測試／平衡用（不在介面上）
-  window.__afkLadder = { floorSpec: floorSpec, bossHp: bossHp, dmgMult: dmgMult, startRun: startRun, endRun: endRun, run: function () { return run; }, data: data, championOf: championOf, amChampion: amChampion, pushNow: function () { var L = data(); if (L && L.best > 0) pushRecord(); }, weekId: weekId, wb: { start: startWb, tierOf: wbTierOf, bossId: wbBossId, data: wbData, local: wbLocal, setCache: wbSetCache, claim: wbClaim, open: openWbPanel, force: function (id) { _wbForce = id; } }, weekAffixes: weekAffixes, curAffixes: curAffixes, floorTicks: floorTicks, AFFIXES: AFFIXES, forceAffixes: function (a) { _forceAffix = a; _affixCache = { wk: '', list: [] }; } };
+  window.__afkLadder = { floorSpec: floorSpec, bossHp: bossHp, dmgMult: dmgMult, startRun: startRun, endRun: endRun, run: function () { return run; }, data: data, championOf: championOf, amChampion: amChampion, pushNow: function () { var L = data(); if (L && L.best > 0) pushRecord(); }, weekId: weekId, wb: { start: startWb, tierOf: wbTierOf, bossId: wbBossId, data: wbData, local: wbLocal, setCache: wbSetCache, claim: wbClaim, open: openWbPanel, force: function (id) { _wbForce = id; } }, evt: { roll: evtRoll, apply: evtApply, after: evtAfterSettle, show: showEvents, data: evtData, startTm: startTm, tm: tmData, offerHtml: offerHtml }, weekAffixes: weekAffixes, curAffixes: curAffixes, floorTicks: floorTicks, AFFIXES: AFFIXES, forceAffixes: function (a) { _forceAffix = a; _affixCache = { wk: '', list: [] }; } };
 
   console.log('[AFK-ladder] hooks OK');
 })();
