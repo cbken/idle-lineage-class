@@ -564,9 +564,12 @@
   }
 
   // 週冠軍：經驗 +10（組隊加成百分點）、掉寶 ×1.1
+  var _champAt = 0, _champV = false;   // ⚡ 每次掉寶／經驗都會問：快取 10 秒，免得每次都讀 localStorage＋解析整張榜（補跑時每秒上萬次）
   function amChampion() {
-    var me = cloudSlot(); if (!me) return false;
-    var c = championOf(boardCache()); return !!(c && c.players.indexOf(me) >= 0);
+    var now = Date.now(); if (now - _champAt < 10000) return _champV;
+    _champAt = now;
+    var me = cloudSlot(); if (!me) return (_champV = false);
+    var c = championOf(boardCache()); return (_champV = !!(c && c.players.indexOf(me) >= 0));
   }
   if (typeof window.partyExpBonusPct === 'function') { var _origPEB = window.partyExpBonusPct; window.partyExpBonusPct = function () { var v = _origPEB.apply(this, arguments); return amChampion() ? v + 10 : v; }; }
   if (typeof window.partyDropRate === 'function') { var _origPDR = window.partyDropRate; window.partyDropRate = function () { var v = _origPDR.apply(this, arguments); return amChampion() ? Math.min(1, v * 1.1) : v; }; }
