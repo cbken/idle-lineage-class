@@ -271,14 +271,49 @@ function cardCollectionBonus(p, d) {
 }
 
 // ===== 🎴 威頓村 魔法娃娃商人：卡片合成（同名同階滿 10 張 → 1 張高一階；普→銀→金連鎖）=====
-//  只看「身上攜帶（背包 player.inv）」的卡片，不含倉庫。合成出的高階卡用 gainItem 發放（不走掉落路徑，不會被「已收錄自動賣」折現）。
-function _cardCountsByTier(ft) {   // {怪名: 張數}：背包內第 ft 階實體卡·限「已開通圖鑑」(cardDexTier>=1·實體卡本即 score100) 且高一階卡存在(血盟/建築無卡→跳過)
-    let cnt = {};
-    player.inv.forEach(it => {
-        let d = DB.items[it.id];
-        if (d && d.eff === 'card' && !it.lock && d.cardTier === ft && DB.items[cardId(d.cardMob, ft + 1)] && cardDexTier(d.cardMob) >= 1) cnt[d.cardMob] = (cnt[d.cardMob] || 0) + (it.cnt || 1);   // 🔒 鎖定卡不計入合成池（與 dollTierCount 一致）
-    });
+//  🎎 v3.18.3 起：背包＋倉庫＋其他角色背包的卡一起算（扣卡順序同兌換：背包→倉庫→其他角色），合成結果發到目前角色背包。合成出的高階卡用 gainItem 發放（不走掉落路徑，不會被「已收錄自動賣」折現）。
+function _cardSynthOk(it, ft) { let d = it && DB.items[it.id]; return !!(d && d.eff === 'card' && !it.lock && d.cardTier === ft && DB.items[cardId(d.cardMob, ft + 1)] && cardDexTier(d.cardMob) >= 1); }   // 🔒 鎖定卡不計入合成池（與 dollTierCount 一致）
+function _cardCountsByTier(ft, invOnly) {   // {怪名: 張數}：第 ft 階實體卡·限「已開通圖鑑」(cardDexTier>=1) 且高一階卡存在(血盟/建築無卡→跳過)
+    let cnt = {}, add = it => { if (_cardSynthOk(it, ft)) { let m = DB.items[it.id].cardMob; cnt[m] = (cnt[m] || 0) + (it.cnt || 1); } };
+    player.inv.forEach(add);
+    if (!invOnly) {   // 🎎 v3.18.3 Ken 10/10：合成也把倉庫＋其他角色背包的卡一起算（同 v3.18.1 兌換）
+        try { loadWarehouse().items.forEach(add); } catch (e) {}
+        try { _dollAltSlots().forEach(c => c.p.inv.forEach(add)); } catch (e) {}
+    }
     return cnt;
+}
+let _cardSynthFrom = {};   // 本次合成從倉庫／其他角色拿了幾張（給訊息用）
+// 依 need{怪:張} 扣第 ft 階卡：背包 → 倉庫 → 其他角色；回傳實扣 {怪:張}
+function _cardSynthConsume(ft, need) {
+    let left = {}; for (let m in need) if (need[m] > 0) left[m] = need[m];
+    let takeFrom = (arr) => {   // 從陣列（就地）扣，回傳扣了幾張
+        let took = 0;
+        for (let i = arr.length - 1; i >= 0; i--) {
+            let it = arr[i]; if (!_cardSynthOk(it, ft)) continue;
+            let m = DB.items[it.id].cardMob; if (!left[m]) continue;
+            let k = it.cnt || 1, t = Math.min(k, left[m]);
+            if (t >= k) arr.splice(i, 1); else it.cnt = k - t;
+            left[m] -= t; took += t; if (!left[m]) delete left[m];
+        }
+        return took;
+    };
+    takeFrom(player.inv);
+    if (Object.keys(left).length) {
+        let snap = JSON.stringify(left);
+        try { let w = loadWarehouse(), t = takeFrom(w.items); if (t > 0) { if (saveWarehouse(w) === false) throw 0; _cardSynthFrom['倉庫'] = (_cardSynthFrom['倉庫'] || 0) + t; } } catch (e) { left = JSON.parse(snap); }   // 倉庫寫失敗＝沒扣到
+    }
+    if (Object.keys(left).length) {
+        for (let c of _dollAltSlots()) {
+            if (!Object.keys(left).length) break;
+            let snap = JSON.stringify(left), t = takeFrom(c.p.inv);
+            if (t <= 0) continue;
+            let ok = false; try { ok = !!_lzSet('lineage_idle_save_' + c.n, _saveWrap(JSON.stringify(c.doc))); } catch (e) {}
+            if (!ok) { left = JSON.parse(snap); continue; }   // 寫失敗＝那個角色的卡沒被扣→不算
+            let nm = c.p.name || ('第' + c.n + '格'); _cardSynthFrom[nm] = (_cardSynthFrom[nm] || 0) + t;
+        }
+    }
+    let got = {}; for (let m in need) got[m] = need[m] - (left[m] || 0);
+    return got;
 }
 // 貪婪合成：每湊滿 10 張 → 1 張高一階卡；輸出怪＝當前剩餘「最多」的怪(平手取圖鑑分較高)·先扣它自己·不足再從其他怪任意補足 10。回 {made, out:{怪:張}, leftover:{怪:剩餘}}
 function _cardSynthGreedy(counts) {
@@ -305,29 +340,32 @@ function _cardSynthPlan() {   // 純計算預覽（不改狀態）：回 {2:銀�
 }
 function magicDollSynth() {   // 一鍵合成：先普→銀(任意湊10·輸出多者)，再銀→金(新銀卡一起參與連鎖)。無 RNG＝決定論
     let made = { 2: 0, 3: 0 };
-    for (let ft = 1; ft <= 2; ft++) {   // 兩階段各自重掃 inv：銀卡那輪會掃到上一輪剛 gainItem 的銀卡（連鎖）
+    _cardSynthFrom = {};
+    for (let ft = 1; ft <= 2; ft++) {   // 兩階段各自重掃：銀卡那輪會掃到上一輪剛 gainItem 的銀卡（連鎖）
         let counts = _cardCountsByTier(ft);
         let g = _cardSynthGreedy(counts);
         if (!g.made) continue;
-        for (let nm in counts) {   // 消耗：每隻怪扣掉「初始 − 剩餘」張實體卡（跨該怪所有 entry 依 cnt 扣，歸 0 的 entry 記 uid 移除）
-            let consume = counts[nm] - (g.leftover[nm] || 0);
-            if (consume <= 0) continue;
-            let entries = player.inv.filter(it => { let d = DB.items[it.id]; return d && d.eff === 'card' && !it.lock && d.cardTier === ft && d.cardMob === nm; });   // 🔒 鎖定卡不被消耗（須與 _cardCountsByTier 的計數口徑一致）
-            let rm = [];
-            for (let it of entries) { if (consume <= 0) break; let cc = it.cnt || 1; if (cc <= consume) { consume -= cc; rm.push(it.uid); } else { it.cnt = cc - consume; consume = 0; } }
-            if (rm.length) player.inv = player.inv.filter(i => rm.indexOf(i.uid) === -1);
+        let need = {}; for (let nm in counts) { let k = counts[nm] - (g.leftover[nm] || 0); if (k > 0) need[nm] = k; }
+        let got = _cardSynthConsume(ft, need);
+        let short = 0; for (let nm in need) short += need[nm] - (got[nm] || 0);
+        let out = g.out, n = g.made;
+        if (short > 0) {   // 罕見：別的分頁剛好動到倉庫／存檔 → 用實際扣到的卡重算，扣多的退回背包
+            let real = {}; for (let nm in got) if (got[nm] > 0) real[nm] = got[nm];
+            let g2 = _cardSynthGreedy(real); out = g2.out; n = g2.made;
+            for (let nm in g2.leftover) if (g2.leftover[nm] > 0) gainItem(cardId(nm, ft), g2.leftover[nm], false, false, false, true);
         }
-        for (let nm in g.out) gainItem(cardId(nm, ft + 1), g.out[nm], false, false, false, true);   // 發放每隻輸出怪的高一階卡（堆疊進背包；不觸發掉落自動賣）；deferUi＝多隻怪一次合成時不逐筆重建背包（下方統一 renderTabs(true)）
-        made[ft + 1] += g.made;
+        for (let nm in out) gainItem(cardId(nm, ft + 1), out[nm], false, false, false, true);   // 發放每隻輸出怪的高一階卡（堆疊進背包；不觸發掉落自動賣）；deferUi＝多隻怪一次合成時不逐筆重建背包（下方統一 renderTabs(true)）
+        made[ft + 1] += n;
     }
     let tot = made[2] + made[3];
     if (!tot) {
-        logSys('<span class="text-slate-400">魔法娃娃商人：你身上沒有可合成的卡片（需已開通圖鑑的同階卡合計滿 10 張）。</span>');
+        logSys('<span class="text-slate-400">魔法娃娃商人：沒有可合成的卡片（背包＋倉庫＋其他角色，需已開通圖鑑的同階卡合計滿 10 張）。</span>');
     } else {
         let parts = [];
         if (made[2]) parts.push(`<span class="c-card-silver font-bold">銀卡 ×${made[2]}</span>`);
         if (made[3]) parts.push(`<span class="c-card-gold font-bold">金卡 ×${made[3]}</span>`);
-        logSys(`<span class="text-amber-200">魔法娃娃商人為你合成了 ${parts.join('、')}！</span>`);
+        let _fr = Object.keys(_cardSynthFrom).map(k => k + ' ' + _cardSynthFrom[k] + ' 張');
+        logSys(`<span class="text-amber-200">魔法娃娃商人為你合成了 ${parts.join('、')}！</span>${_fr.length ? '（含' + _fr.join('、') + '）' : ''}`);
     }
     try { if (typeof autoSortInventory === 'function') autoSortInventory(); } catch (e) {}   // deferUi 會略過自動排列→批次結束補一次（函式內建 10 秒節流）
     if (typeof renderTabs === 'function') renderTabs(true);
@@ -408,7 +446,7 @@ function dollExcessSilverCards() { return player.inv.filter(it => { let d = DB.i
 function dollExcessSilverCount() { return dollExcessSilverCards().reduce((s, it) => s + (it.cnt || 1), 0) + _dollWhExcessCount(2) + _dollAltExcessCount(2); }   // 🔧 含倉庫＋其他角色多餘銀卡
 function dollExcessGoldCards() { return player.inv.filter(it => { let d = DB.items[it.id]; return d && d.eff === 'card' && !it.lock && d.cardTier === 3 && cardDexTier(d.cardMob) >= 3; }); }   // 🔒 鎖定卡不列入可兌換
 function dollExcessGoldCount() { return dollExcessGoldCards().reduce((s, it) => s + (it.cnt || 1), 0) + _dollWhExcessCount(3) + _dollAltExcessCount(3); }   // 🔧 含倉庫＋其他角色多餘金卡
-// 🔧 倉庫「多餘卡片」支援（僅圖鑑已開金階的重複卡）：兌換娃娃袋子/盒子時，背包不足自動動用倉庫存量（背包優先）。走 load→save 成對、吃倉庫安全網（拒寫失敗檔＋多分頁 uid 合併）。⚠️ 僅「兌換」用；卡片/娃娃「合成」仍只讀背包（見 magicDollSynth／dollSynth 不變量）。
+// 🔧 倉庫「多餘卡片」支援（僅圖鑑已開金階的重複卡）：兌換娃娃袋子/盒子時，背包不足自動動用倉庫存量（背包優先）。走 load→save 成對、吃倉庫安全網（拒寫失敗檔＋多分頁 uid 合併）。⚠️ 娃娃「合成」(dollSynth)仍只讀背包；卡片合成 v3.18.3 起也跨倉庫＋其他角色（見 _cardSynthConsume）。
 function _dollWhExcessCount(tier) {
     try { return loadWarehouse().items.filter(it => { let d = DB.items[it.id]; return d && !it.lock && d.eff === 'card' && d.cardTier === tier && cardDexTier(d.cardMob) >= 3; }).reduce((s, it) => s + (it.cnt || 1), 0); } catch (e) { return 0; }
 }
@@ -687,7 +725,7 @@ function renderCardSynth(div) {
     let h = `<div class="p-4 text-slate-300 leading-relaxed">魔法娃娃商人：把重複的卡片交給我吧。<br>
         <b>任意 10 張已開通圖鑑的<span class="c-card-common font-bold">普卡</span></b> → 1 張 <span class="c-card-silver font-bold">銀卡</span>；
         <b>任意 10 張<span class="c-card-silver font-bold">銀卡</span></b> → 1 張 <span class="c-card-gold font-bold">金卡</span>。<span class="text-slate-400 text-sm">（不同怪的卡也能湊）</span>
-        <br><span class="text-slate-400 text-sm">合成出的高階卡＝那 10 張材料中<b>「數量最多」的怪</b>。我會自動檢查你<b>身上攜帶</b>的所有卡片並一次合成（普卡合成出的銀卡會一起參與金卡合成；倉庫裡的卡不算）。</span></div>`;
+        <br><span class="text-slate-400 text-sm">合成出的高階卡＝那 10 張材料中<b>「數量最多」的怪</b>。我會自動檢查<b>背包＋倉庫＋其他角色</b>的所有卡片並一次合成（扣卡順序：背包→倉庫→其他角色；上鎖的卡和別的分頁開著的角色不動；普卡合成出的銀卡會一起參與金卡合成；合成結果放進目前角色背包）。</span></div>`;
     h += `<div class="px-4 pb-2"><div class="bg-slate-900/60 border border-slate-700 rounded p-3 text-sm space-y-1">
         <div class="flex justify-between"><span>可合成 <span class="c-card-silver font-bold">銀卡</span></span><span class="${made[2] ? 'text-green-400' : 'text-slate-500'} font-bold">${made[2]} 張</span></div>
         <div class="flex justify-between"><span>可合成 <span class="c-card-gold font-bold">金卡</span></span><span class="${made[3] ? 'text-green-400' : 'text-slate-500'} font-bold">${made[3]} 張</span></div>
