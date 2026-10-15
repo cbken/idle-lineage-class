@@ -99,6 +99,47 @@
         } catch (e) {}
     };
 
+    // ── 物品全部存入:把左邊背包清單「目前列出來的」全部存進倉庫 ──────────
+    //   v3.18.4 Ken:「存倉庫可以一鍵全部都存嗎,不能存的就不存」。
+    //   範圍＝畫面上背包清單看得到的那些(跟著分類/子分類/搜尋/只列可穿/遺骸套裝走),
+    //   所以要全存道具就切「道具」、要全存武器就切「武器」,不會把藥水箭矢連帶清空。
+    //   鎖定(核心本來就不列)、不可存(核心畫成灰 div 不是 button)一律跳過;
+    //   交易保護全走核心 whTxnSnapshot/whTxnCommit(先存角色再存倉庫,任一失敗全還原)。
+    window.__afkWhItemsAll = function () {
+        try {
+            if (typeof mapState === 'undefined' || !mapState.current || !String(mapState.current).startsWith('town_')) { logSys('<span class="text-red-400">離開安全區後無法使用倉庫。</span>'); return; }
+            if (typeof whTxnSnapshot !== 'function' || typeof whTxnCommit !== 'function' || typeof _whStackFind !== 'function' || typeof _whStackAbsorb !== 'function' || typeof _whClearJunkState !== 'function') { logSys('<span class="text-red-400">全部存入暫時無法使用。</span>'); return; }
+            var host = document.getElementById('wh-inv-list'); if (!host) return;
+            var uids = [];
+            host.querySelectorAll('button[data-tip-uid]').forEach(function (el) {
+                if (el.style.display === 'none') return;   // 遺骸套裝子分類過濾掉的列
+                uids.push(String(el.getAttribute('data-tip-uid')));
+            });
+            if (!uids.length) { logSys('背包清單目前沒有可存入的物品。'); return; }
+            var w = loadWarehouse();
+            var snap = whTxnSnapshot();
+            var noStore = (typeof WH_NO_STORE !== 'undefined') ? WH_NO_STORE : [];
+            var max = (typeof WH_MAX !== 'undefined') ? WH_MAX : 5000;
+            var done = 0, full = false;
+            for (var i = 0; i < uids.length; i++) {
+                var idx = player.inv.findIndex(function (x) { return x && String(x.uid) === uids[i]; });
+                if (idx < 0) continue;
+                var it = player.inv[idx];
+                if (noStore.indexOf(it.id) >= 0 || it.lock) continue;
+                var stack = _whStackFind(w.items, it);
+                if (!stack && w.items.length >= max) { full = true; break; }
+                player.inv.splice(idx, 1);
+                if (stack) _whStackAbsorb(stack, it, it.cnt || 1); else w.items.push(_whClearJunkState(it));
+                done++;
+            }
+            if (!done) { logSys(full ? '<span class="text-red-400">倉庫已滿，無法存入。</span>' : '背包清單目前沒有可存入的物品。'); return; }
+            var ok = whTxnCommit(w, snap);
+            try { renderTabs(true); updateUI(); } catch (e) {}
+            renderWarehouseNPC(document.getElementById('interaction-content'));
+            if (ok) logSys('<span class="text-cyan-300 font-bold">全部存入：已存入 ' + done + ' 項物品' + (full ? '（倉庫已滿，部分未存入）' : '') + '。</span>');
+        } catch (e) { try { console.warn('[AFK-warehouse] 全部存入失敗', e); } catch (_) {} }
+    };
+
     // ── 觸控長按看物品資料 ─────────────────────────────────────
     // 核心把格子的 click 寫死成 whDeposit/whWithdraw、資訊只掛在桌機 mousemove tooltip 上,
     // 手機因此完全看不到物品資料;這裡在兩個清單容器上做事件委派補上長按檢視。
@@ -401,6 +442,19 @@
             // 圖示鈕(文字太佔位);沿用核心存入/取出鈕的配色,一眼看得出同組
             goldRow.appendChild(mk('afk-wh-allin', '📥', '金幣全部存入', 'in', 'background: linear-gradient(135deg, #0c4a5e 0%, #0e7490 28%, #0a3d4d 52%, #11657e 76%, #093440 100%); color: #a5f3fc; border-color: #0891b2;'));
             goldRow.appendChild(mk('afk-wh-allout', '📤', '金幣全部取出', 'out', 'background: linear-gradient(135deg, #6b2a10 0%, #b3490e 28%, #5a230e 52%, #9a3e0c 76%, #4a1d0c 100%); color: #fed7aa; border-color: #c2410c;'));
+        }
+        // 物品「全部存入」鈕:放在核心「一鍵存入」左邊
+        var oneBtn = document.querySelector('button[onclick="whOneClickDeposit()"]');
+        if (oneBtn && !document.getElementById('afk-wh-itemsall')) {
+            var ab = document.createElement('button');
+            ab.id = 'afk-wh-itemsall'; ab.type = 'button'; ab.textContent = '全部存入';
+            ab.title = '把左邊背包清單目前列出的物品全部存入（跟著分類／搜尋走；鎖定、不可存的不動）';
+            ab.setAttribute('aria-label', ab.title);
+            ab.className = oneBtn.className;
+            ab.setAttribute('style', oneBtn.getAttribute('style') || '');
+            ab.addEventListener('click', function () { window.__afkWhItemsAll(); });
+            oneBtn.parentNode.insertBefore(ab, oneBtn);
+            oneBtn.classList.remove('ms-auto');   // 靠右的空白改由「全部存入」撐開,兩鈕並排
         }
         // 主分類下拉補 遺物/席琳遺骸(核心每次重繪都重建 select → 每次補)
         var sel = document.querySelector('select[onchange*="whSetFilter"]');
