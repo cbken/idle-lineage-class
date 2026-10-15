@@ -112,6 +112,7 @@
         '<span class="ms-seg ms-ac">防 <b id="ms-ac">--</b></span>' +
         '<span class="ms-seg ms-mr">魔防 <b id="ms-mr">--</b></span>' +
         '<span class="ms-seg ms-gold">💰 <span id="ms-gold">--</span></span>' +
+        '<span class="ms-seg ms-lcoin" title="天梯幣">🪙 <span id="ms-lcoin">--</span></span>' +   // v3.18.6 天梯幣(來源=afk-ladder 在左欄加的 #afk-st-lcoin)
       '</div>' +
       '<div class="ms-row ms-row2">' +
         '<div class="ms-bar ms-hp"><i class="ms-bar-fill" id="ms-hp-bar"></i><span class="ms-bar-txt"><b>HP</b> <span id="ms-hp">--</span></span></div>' +
@@ -196,6 +197,7 @@
       '#m-status #ms-lv{color:#fff;font-size:15px;}',
       '#m-status #ms-ac,#m-status #ms-mr{color:#bfdbfe;font-size:14px;}',
       '#m-status .ms-gold{color:#fbbf24;font-weight:bold;}',
+      '#m-status .ms-lcoin{color:#67e8f9;font-weight:bold;}',
       /* 🔮 席琳標記靠右;只換字色不換整條底色 */
       '#m-status .ms-sherine{flex:0 0 auto;font-weight:bold;font-size:14px;color:#c4b5fd;text-shadow:0 0 6px rgba(196,181,253,.85);}',
       '#m-status .ms-sherine.ms-sherine-mad{color:#fca5a5;text-shadow:0 0 7px rgba(248,113,113,.9);}',
@@ -232,6 +234,7 @@
     el.ac = strip.querySelector('#ms-ac');
     el.mr = strip.querySelector('#ms-mr');
     el.gold = strip.querySelector('#ms-gold');
+    el.lcoin = strip.querySelector('#ms-lcoin');
     el.hp = strip.querySelector('#ms-hp');
     el.mp = strip.querySelector('#ms-mp');
     el.hpBar = strip.querySelector('#ms-hp-bar');
@@ -262,6 +265,7 @@
     setTxt(el.ac, txt(SRC.ac) || '--');
     setTxt(el.mr, txt(SRC.mr) || '--');
     setTxt(el.gold, txt(SRC.gold) || '--');
+    setTxt(el.lcoin, txt('afk-st-lcoin') || '0');
     setTxt(el.hp, txt(SRC.hp) || '--');
     setTxt(el.mp, txt(SRC.mp) || '--');
     setW(el.hpBar, barW(SRC.hpBar));   // 跟原版血條同步寬度(讀遊戲自己算好的 %)
