@@ -1292,6 +1292,77 @@
     };
   }
 
+  // ===== 🏦 v3.18.6 天梯幣存倉庫＋左欄顯示（Ken：「天梯幣應該跟金幣一樣可以存，要在左邊金幣那框顯示」）=====
+  //   倉庫的天梯幣另存一個 key（倉庫桶 key + '_lc'，跟倉庫一樣分模式、四角色共用）：
+  //   不塞進核心倉庫桶，因為核心 saveWarehouse 只寫 {items,gold}，舊分頁一寫就會把它洗掉。
+  //   雲端同步是整包 localStorage 打包，新 key 自動跟著走。
+  //   交易順序照核心 whTxnCommit：先存角色（扣/加 L.coins）→ 再寫倉庫；任一失敗兩邊還原。
+  function whLcKey() { return (typeof whKey === 'function' ? whKey() : 'lineage_idle_warehouse') + '_lc'; }
+  function whLcGet() { try { var v = parseInt(_lzGet(whLcKey()), 10); return v > 0 ? v : 0; } catch (e) { return 0; } }
+  function whLcSet(n) { try { return _lzSet(whLcKey(), String(Math.max(0, Math.floor(n)))) !== false; } catch (e) { return false; } }
+  function inTown() { return typeof mapState !== 'undefined' && mapState.current && String(mapState.current).indexOf('town_') === 0; }
+  function whLcMove(dir, all) {
+    if (!inTown()) { log('<span class="text-red-400">離開安全區後無法使用倉庫。</span>'); return; }
+    var L = data(); if (!L) return;
+    var bank = whLcGet();
+    var have = dir === 'in' ? L.coins : bank;
+    var inp = document.getElementById('afk-wh-lc-amt');
+    var amt = all ? have : Math.min(have, parseInt(inp && inp.value, 10) || 0);
+    if (!(amt > 0)) return;
+    var before = L.coins;
+    L.coins = dir === 'in' ? L.coins - amt : L.coins + amt;
+    var okGame = typeof window.saveGame !== 'function' || window.saveGame();
+    if (!okGame || !whLcSet(dir === 'in' ? bank + amt : bank - amt)) {
+      L.coins = before; try { if (typeof window.saveGame === 'function') window.saveGame(); } catch (e) {}
+      log('<span class="text-red-400 font-bold">天梯幣' + (dir === 'in' ? '存入' : '取出') + '失敗，已還原。</span>');
+    }
+    lcLeftPaint(true);
+    try { window.renderWarehouseNPC(document.getElementById('interaction-content')); } catch (e) {}
+  }
+  window.__afkWhLc = whLcMove;
+  function whLcInject() {
+    var goldInp = document.getElementById('wh-gold-amt'); if (!goldInp) return;
+    if (document.getElementById('afk-wh-lc-row')) return;
+    var goldRow = goldInp.parentElement; var L = data(); if (!goldRow || !L) return;
+    var row = document.createElement('div');
+    row.id = 'afk-wh-lc-row'; row.className = goldRow.className;
+    var cIn = 'background: linear-gradient(135deg, #0c4a5e 0%, #0e7490 28%, #0a3d4d 52%, #11657e 76%, #093440 100%); color: #a5f3fc; border-color: #0891b2;';
+    var cOut = 'background: linear-gradient(135deg, #6b2a10 0%, #b3490e 28%, #5a230e 52%, #9a3e0c 76%, #4a1d0c 100%); color: #fed7aa; border-color: #c2410c;';
+    var bc = 'btn px-4 text-sm font-bold h-8 inline-flex items-center justify-center';
+    row.innerHTML = '<span>天梯幣　背包：<span class="text-cyan-300 font-bold">' + L.coins + '</span>　倉庫：<span class="text-cyan-300 font-bold">' + whLcGet() + '</span></span>' +
+      '<input id="afk-wh-lc-amt" type="number" min="1" value="10" class="w-24 bg-slate-900 border border-slate-600 text-center text-white rounded h-8 ms-auto">' +
+      '<button type="button" data-d="in" class="' + bc + '" style="' + cIn + '">存入 ▶</button>' +
+      '<button type="button" data-d="out" class="' + bc + '" style="' + cOut + '">◀ 取出</button>' +
+      '<button type="button" data-d="in" data-all="1" title="天梯幣全部存入" aria-label="天梯幣全部存入" class="btn px-2 text-sm font-bold h-8 inline-flex items-center justify-center" style="' + cIn + '">📥</button>' +
+      '<button type="button" data-d="out" data-all="1" title="天梯幣全部取出" aria-label="天梯幣全部取出" class="btn px-2 text-sm font-bold h-8 inline-flex items-center justify-center" style="' + cOut + '">📤</button>';
+    row.querySelectorAll('button').forEach(function (b) { b.addEventListener('click', function () { whLcMove(b.getAttribute('data-d'), b.getAttribute('data-all') === '1'); }); });
+    goldRow.parentNode.insertBefore(row, goldRow.nextSibling);
+  }
+  if (typeof window.renderWarehouseNPC === 'function') {
+    var _origRWH = window.renderWarehouseNPC;
+    window.renderWarehouseNPC = function () { var r = _origRWH.apply(this, arguments); try { whLcInject(); } catch (e) {} return r; };
+  }
+  // 左欄金幣下面加一行天梯幣（updateUI 很頻繁 → 只在數字變了才動 DOM）
+  var _lcShown = null;
+  function lcLeftPaint(force) {
+    var g = document.getElementById('st-gold'); if (!g) return;
+    var row = document.getElementById('afk-st-lcoin');
+    if (!row) {
+      var gr = g.closest('.status-gold-row'); if (!gr) return;
+      row = document.createElement('div'); row.className = 'status-gold-row'; row.id = 'afk-st-lcoin-row';
+      row.innerHTML = '<span>天梯幣</span><span class="text-cyan-300 font-bold" id="afk-st-lcoin">0</span>';
+      gr.parentNode.insertBefore(row, gr.nextSibling);
+      row = document.getElementById('afk-st-lcoin'); _lcShown = null;
+    }
+    var L = data(); var v = L ? L.coins : 0;
+    if (force || v !== _lcShown) { _lcShown = v; row.textContent = v.toLocaleString(); }
+  }
+  if (typeof window.updateUI === 'function') {
+    var _origUU2 = window.updateUI;
+    window.updateUI = function () { var r = _origUU2.apply(this, arguments); try { lcLeftPaint(); } catch (e) {} return r; };
+  }
+  try { lcLeftPaint(); } catch (e) {}
+
   // 測試／平衡用（不在介面上）
   window.__afkLadder = { floorSpec: floorSpec, bossHp: bossHp, dmgMult: dmgMult, startRun: startRun, endRun: endRun, run: function () { return run; }, data: data, championOf: championOf, amChampion: amChampion, pushNow: function () { var L = data(); if (L && L.best > 0) pushRecord(); }, weekId: weekId, wb: { start: startWb, tierOf: wbTierOf, bossId: wbBossId, data: wbData, local: wbLocal, setCache: wbSetCache, claim: wbClaim, open: openWbPanel, force: function (id) { _wbForce = id; } }, evt: { roll: evtRoll, apply: evtApply, after: evtAfterSettle, show: showEvents, data: evtData, startTm: startTm, tm: tmData, offerHtml: offerHtml }, weekAffixes: weekAffixes, curAffixes: curAffixes, floorTicks: floorTicks, AFFIXES: AFFIXES, forceAffixes: function (a) { _forceAffix = a; _affixCache = { wk: '', list: [] }; } };
 
