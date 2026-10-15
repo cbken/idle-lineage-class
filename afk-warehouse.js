@@ -140,6 +140,49 @@
         } catch (e) { try { console.warn('[AFK-warehouse] 全部存入失敗', e); } catch (_) {} }
     };
 
+    // ── 物品全部取出(v3.18.5 Ken「一鍵全取出也要做」):右邊倉庫清單目前列出的全部領回背包 ──
+    //   範圍同全部存入＝畫面上倉庫清單看得到的列;逐件照核心 whWithdraw 的整疊取出邏輯
+    //   (uid 撞號換新、清自動販賣暫態、可堆疊併入背包同簽章堆疊),最後一次 whTxnCommit;
+    //   成功後才登錄收集冊(與核心相同:失敗交易不留圖鑑進度)。
+    window.__afkWhItemsAllOut = function () {
+        try {
+            if (typeof mapState === 'undefined' || !mapState.current || !String(mapState.current).startsWith('town_')) { logSys('<span class="text-red-400">離開安全區後無法使用倉庫。</span>'); return; }
+            if (typeof whTxnSnapshot !== 'function' || typeof whTxnCommit !== 'function' || typeof _whStackFind !== 'function' || typeof _whStackAbsorb !== 'function' || typeof _whClearJunkState !== 'function' || typeof uid !== 'function') { logSys('<span class="text-red-400">全部取出暫時無法使用。</span>'); return; }
+            var host = document.getElementById('wh-store-list'); if (!host) return;
+            var uids = [];
+            host.querySelectorAll('button[data-tip-uid]').forEach(function (el) {
+                if (el.style.display === 'none') return;   // 遺骸套裝子分類過濾掉的列
+                uids.push(String(el.getAttribute('data-tip-uid')));
+            });
+            if (!uids.length) { logSys('倉庫清單目前沒有可取出的物品。'); return; }
+            var w = loadWarehouse();
+            var snap = whTxnSnapshot();
+            var got = [];
+            for (var i = 0; i < uids.length; i++) {
+                var idx = w.items.findIndex(function (x) { return x && String(x.uid) === uids[i]; });
+                if (idx < 0) continue;
+                var it = w.items[idx];
+                var total = it.cnt || 1;
+                w.items.splice(idx, 1);
+                if (!it.uid || player.inv.some(function (x) { return x.uid === it.uid; })) it.uid = uid();
+                _whClearJunkState(it);
+                var stack = _whStackFind(player.inv, it);
+                if (stack) _whStackAbsorb(stack, it, total); else player.inv.push(it);
+                got.push(it.id);
+            }
+            if (!got.length) { logSys('倉庫清單目前沒有可取出的物品。'); return; }
+            var ok = whTxnCommit(w, snap);
+            if (ok) got.forEach(function (id) {
+                try { if (typeof registerEquipObtained === 'function') registerEquipObtained(id); } catch (e) {}
+                try { if (typeof registerMiscObtained === 'function') registerMiscObtained(id); } catch (e) {}
+                try { if (typeof registerRelicObtained === 'function') registerRelicObtained(id); } catch (e) {}
+            });
+            try { renderTabs(true); updateUI(); } catch (e) {}
+            renderWarehouseNPC(document.getElementById('interaction-content'));
+            if (ok) logSys('<span class="text-amber-300 font-bold">全部取出：已取出 ' + got.length + ' 項物品。</span>');
+        } catch (e) { try { console.warn('[AFK-warehouse] 全部取出失敗', e); } catch (_) {} }
+    };
+
     // ── 觸控長按看物品資料 ─────────────────────────────────────
     // 核心把格子的 click 寫死成 whDeposit/whWithdraw、資訊只掛在桌機 mousemove tooltip 上,
     // 手機因此完全看不到物品資料;這裡在兩個清單容器上做事件委派補上長按檢視。
@@ -455,6 +498,14 @@
             ab.addEventListener('click', function () { window.__afkWhItemsAll(); });
             oneBtn.parentNode.insertBefore(ab, oneBtn);
             oneBtn.classList.remove('ms-auto');   // 靠右的空白改由「全部存入」撐開,兩鈕並排
+            var ob = document.createElement('button');
+            ob.id = 'afk-wh-itemsallout'; ob.type = 'button'; ob.textContent = '全部取出';
+            ob.title = '把右邊倉庫清單目前列出的物品全部取回背包（跟著分類／搜尋走）';
+            ob.setAttribute('aria-label', ob.title);
+            ob.className = oneBtn.className;
+            ob.setAttribute('style', 'background: linear-gradient(135deg, #6b2a10 0%, #b3490e 28%, #5a230e 52%, #9a3e0c 76%, #4a1d0c 100%); color: #fed7aa; border-color: #c2410c;');   // 同核心金幣「取出」配色
+            ob.addEventListener('click', function () { window.__afkWhItemsAllOut(); });
+            oneBtn.parentNode.insertBefore(ob, oneBtn.nextSibling);
         }
         // 主分類下拉補 遺物/席琳遺骸(核心每次重繪都重建 select → 每次補)
         var sel = document.querySelector('select[onchange*="whSetFilter"]');
