@@ -9,7 +9,7 @@
  * 樓層怪：沿用遊戲現有的怪（照樓層等級挑、同樓層兩個玩家永遠同一批＝排行公平），HP 由本檔公式覆寫；
  *   怪物傷害走核心單一入口 riftDamageMult()（物理/魔法/打傭兵/寵物/召喚全吃）。
  * 特殊層（每 25 層）：免疫物理／免疫魔法／反傷 20%，用核心 _reflectWall＋包 reflectWallOnDamage 實作。
- * 獎勵（全部綁定：不能賣、不能進倉庫、黑市不收）：
+ * 獎勵（不能賣、黑市不收；v3.18.6 起三種天梯消耗品可進倉庫，魔眼仍不能）：
  *   ① 天梯魔眼 4 款（25/50/75/100 樓首通）＋魔眼強化石（+1 必成、上限 +10；en 欄位核心對 eye 不用，拿來當魔眼等級）
  *   ② 不爆強化卷（強化武器/防具時勾選；失敗改成「沒反應」，見 enhanceRollOutcome 包裝）
  *   ③ 遺物詞綴重抽石（抄 afk-relicaffix 的骰法，祝福 50%、遠古系 50%）
@@ -125,7 +125,10 @@
   NEW_ITEMS.afk_evt_map = { n: '神秘藏寶圖', type: 'etc', eff: 'afk_evt_map', p: 0, c: 'text-amber-300', noSell: true, noJunk: true, gachaWeight: 0,
     d: '離線掛機時撿到的藏寶圖。在村莊使用：帶隊進入限時 60 秒的寶藏小副本（3 波寶藏守衛），打越多拿越多金幣，全清再加碼寶物。' };
   Object.keys(NEW_ITEMS).forEach(function (id) { if (!DB.items[id]) DB.items[id] = NEW_ITEMS[id]; });
-  try { if (typeof WH_NO_STORE !== 'undefined' && WH_NO_STORE.push) Object.keys(NEW_ITEMS).forEach(function (id) { if (WH_NO_STORE.indexOf(id) < 0) WH_NO_STORE.push(id); }); } catch (e) {}
+  // 🏦 v3.18.6 Ken「天梯捲要可以存」：三種天梯消耗品（不爆強化卷／遺物重抽石／魔眼強化石）開放進倉庫，
+  //   ＋藏寶圖（Ken 同日追加），四個角色可以互相拿來用；魔眼（首通獎勵裝備）仍綁角色、不能存。
+  var WH_STORABLE = { afk_ladder_protect: 1, afk_ladder_reroll: 1, afk_ladder_eyestone: 1, afk_evt_map: 1 };
+  try { if (typeof WH_NO_STORE !== 'undefined' && WH_NO_STORE.push) Object.keys(NEW_ITEMS).forEach(function (id) { if (!WH_STORABLE[id] && WH_NO_STORE.indexOf(id) < 0) WH_NO_STORE.push(id); }); } catch (e) {}
 
   var SHOP = [
     { id: 'afk_ladder_protect', cost: 60 },
