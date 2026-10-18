@@ -87,6 +87,7 @@
             if (at) s += n(at.dmg) * W.dmg + n(at.mp) * W.extraMp;
         } catch (er) {}
         // ④' 效果寫在外掛程式裡、資料欄位看不到的：天梯魔眼（數值照 afk-ladder 的說明）、席琳遺骸的套裝詞綴
+        if (/^afk_eye_/.test(it.id)) s += e * W.ac;   // 魔眼每 +1 → AC −1
         if (it.id === 'afk_eye_hawk') s += (3 + e) * W.hit + (2 + 0.5 * e) * W.crit;
         else if (EYE_SP[it.id]) s += EYE_SP[it.id] + e * 8;
         if (it.seteff) s += SPECIAL * 2;

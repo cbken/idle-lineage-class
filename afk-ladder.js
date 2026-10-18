@@ -553,7 +553,11 @@
   if (typeof window.recomputeStats === 'function') {
     var _origRS = window.recomputeStats;
     window.recomputeStats = function () {
-      var r = _origRS.apply(this, arguments);
+      // 魔眼每 +1 → AC −1（最高 +10＝AC −10）：重算期間暫時把等級塞進物品定義的 ac，讓核心照一般飾品基礎 AC 算（護甲身軀等吃 AC 的也會跟著算到）
+      var _e0 = player && player.eq && player.eq.eye, _ed = _e0 && EYE_IDS.indexOf(_e0.id) >= 0 && DB.items[_e0.id], _acOld;
+      if (_ed) { _acOld = _ed.ac; _ed.ac = (_acOld || 0) + Math.min(10, Math.max(0, _e0.en || 0)); }
+      var r;
+      try { r = _origRS.apply(this, arguments); } finally { if (_ed) { if (_acOld === undefined) delete _ed.ac; else _ed.ac = _acOld; } }
       try {
         var eye = player && player.eq && player.eq.eye, d = player && player.d;
         if (eye && eye.id === 'afk_eye_hawk' && d) {
@@ -563,6 +567,31 @@
         }
       } catch (e) {}
       return r;
+    };
+  }
+
+  // 魔眼說明：顯示「目前等級的實際效果」，並把核心的「無法強化」改成魔眼強化石的說明（不然 +10 看起來跟 +0 一樣）
+  function eyeNow(id, lv) {
+    if (id === 'afk_eye_hawk') return '命中 +' + (3 + lv) + '、暴擊率 +' + (2 + 0.5 * lv) + '%';
+    if (id === 'afk_eye_unyield') return '致命傷害留 1 HP，冷卻 ' + (300 - 15 * lv) + ' 秒';
+    if (id === 'afk_eye_devour') return '隊伍對頭目傷害的 ' + (1 + 0.2 * lv).toFixed(1).replace(/\.0$/, '') + '% 回復你的 HP';
+    if (id === 'afk_eye_king') return '隊伍對頭目的傷害 +' + (15 + lv) + '%';
+    return '';
+  }
+  if (typeof window.buildItemDescHTML === 'function') {
+    var _origBID = window.buildItemDescHTML;
+    window.buildItemDescHTML = function (item) {
+      var h = _origBID.apply(this, arguments);
+      try {
+        if (item && EYE_IDS.indexOf(item.id) >= 0 && typeof h === 'string') {
+          var lv = Math.min(10, Math.max(0, item.en || 0));
+          var now = '<br><span class="text-cyan-300 font-bold">👁️ 目前 +' + lv + '：' + (lv ? 'AC −' + lv + '、' : '') + eyeNow(item.id, lv) + '</span>';
+          var tag = '<span class="text-rose-300 font-bold">無法強化</span>';
+          var rep = '<span class="text-cyan-300">用天梯．魔眼強化石強化，每 +1：AC −1＋效果提升（' + lv + '／10）</span>';
+          h = h.indexOf(tag) >= 0 ? h.replace(tag, rep) + now : h + now;
+        }
+      } catch (e) {}
+      return h;
     };
   }
 
