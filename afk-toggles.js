@@ -70,6 +70,7 @@
         { id: 'statpts', name: '能力值來源分解', desc: '能力值旁列出「初始／升級／藥水」各給了多少點', group: '遊戲介面' },
         { id: 'itemsearch', name: '背包名稱搜尋', desc: '背包分頁加搜尋框，打字就找得到東西', group: '遊戲介面' },
         { id: 'invlist', name: '背包條列式', desc: '背包改成一行一件，比格子好找', group: '遊戲介面' },
+        { id: 'gearscore', name: '裝備評分', desc: '每件裝備顯示分數，左欄顯示身上裝備總分', group: '遊戲介面' },
         { id: 'warehouse', name: '倉庫擴充', desc: '倉庫可一鍵存入／取出全部金幣，遺物與席琳遺骸分開列', group: '遊戲介面' },
         { id: 'eqlist', name: '裝備條列式', desc: '裝備分頁改成部位條列，不用看 12 格圖', group: '遊戲介面' },
         { id: 'npclist', name: '村莊 NPC 條列式', desc: '村莊改成 NPC 清單，點名字就能互動', group: '遊戲介面' },
