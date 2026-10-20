@@ -91,6 +91,7 @@
         if (it.id === 'afk_eye_hawk') s += (3 + e) * W.hit + (2 + 0.5 * e) * W.crit;
         else if (EYE_SP[it.id]) s += EYE_SP[it.id] + e * 8;
         if (it.seteff) s += SPECIAL * 2;
+        if (d.relic && it.fz > 0) { var fz = Math.min(10, Math.floor(it.fz)); s += slot === 'wpn' ? fz * (W.dmg + W.hit) : (slot === 'arm' ? fz * W.ac : fz * (W.ac + W.mr)); }   // 🔥 遺物融合（afk-fusion）
         // ④ 特殊效果
         var sp = 0;
         for (var k in d) if (Object.prototype.hasOwnProperty.call(d, k) && !KNOWN[k] && d[k]) sp++;
