@@ -51,6 +51,7 @@
   function lzBacklog() {
     try { var raw = window._lzWorkerRaw; return raw ? Object.keys(raw).length : 0; } catch (e) { return 0; }
   }
+  var BG_FAST_MIN_TICKS = 600;                 // ⚡ 切回分頁時落後超過這麼多拍(1 分鐘)就改走快速結算(見 bgFastDivert)
   var OVERLAY_MIN_TICK = 3000;                  // 補跑超過這麼多 tick 才顯示進度遮罩(約 5 分鐘)
   // 「每段最多跑這麼久就 await raf 讓出一次」＝畫面更新間隔(進度遮罩只在讓出時重繪、期間頁面凍結)。
   //   值小→讓出多、畫面順但等影格開銷大、結算慢;值大→相反。故依「要補跑的時間長短」動態取值:
@@ -771,7 +772,10 @@
       return ['v3', mapState.current, player.lv, player.sherineWorld ? 1 : 0, player.sherineMad ? 1 : 0,
         player.classicMode ? 1 : 0, player.traditionalMode ? 1 : 0, eq.join(','),
         // v3.13.0 組隊 16 人：隊伍組成也進簽章（帶 7 名量到的殺速不能拿去算帶 15 名；換隊員→重新取樣一次）
-        'A' + (player.allies || []).filter(function (a) { return a; }).map(function (a) { return a._slot; }).sort().join(',')].join('|');   // v2:2026-07-11 上游大移植(遺物效果/傭兵攻速/能力上限100/藥水隨機)殺速普遍改變,讓全體舊統計失效重取樣;v3:既有存檔的 boss 統計可能是「瞬移逃離被誤記成安全擊殺」的髒值(照它走會把玩家想躲的 BOSS 全部秒殺),一律作廢重取樣
+        'A' + (player.allies || []).filter(function (a) { return a; }).map(function (a) { return a._slot; }).sort().join(','),
+        // v3.18.10 魔物追蹤也進簽章(站主存檔實測:沙漠追蹤邪惡蜥蜴時殺速只剩一半)——追蹤中量的殺速不能拿去算沒追蹤的時段,反之亦然。
+        //   結算期間追蹤到期時間會被撐長(_wallHolds),所以用「結算當下有沒有生效」判斷即可。
+        'T' + ((player.tracking && player.tracking.mob && player.tracking.map === mapState.current && player.tracking.until > offStart) ? player.tracking.mob : '')].join('|');   // v2:2026-07-11 上游大移植(遺物效果/傭兵攻速/能力上限100/藥水隨機)殺速普遍改變,讓全體舊統計失效重取樣;v3:既有存檔的 boss 統計可能是「瞬移逃離被誤記成安全擊殺」的髒值(照它走會把玩家想躲的 BOSS 全部秒殺),一律作廢重取樣
     }
     function saveOffStats() {   // 量到新統計就更新快取(隨檢查點/結算尾的 saveGame 固化進存檔)
       try {
@@ -1573,6 +1577,7 @@
     busy: function () { return catchingUp; },
     histKey: histKey,   // 對外:目前角色的離線紀錄 key(供 afk-history)
     fastWhyText: fastWhyText,   // 對外:離線紀錄的 fastWhy 代碼→中文(供 afk-history／afk-diag 顯示,對照表只留這一份)
+    setBgFastMin: function (n) { BG_FAST_MIN_TICKS = Math.max(1, +n || 600); },   // 🧪 測試用:調「切回分頁改走快速結算」門檻(設很大＝停用,做 A/B)
     setCkptMs: function (ms) { CKPT_MS = Math.max(200, +ms || 5000); },   // 🧪 測試用:縮短檢查點間隔(驗「結算中斷只丟尾段」)
     forceCatchup: function (mins, noFast) { _forceNoFast = !!noFast; runCatchup(Math.floor((mins || 60) * 60000 / TICK_MS), true, (typeof mapState !== 'undefined' && mapState && mapState.current) || ''); }   // 帶當前地圖,否則 gotoMap(undefined) 空轉零收益;noFast=true 強制全模擬(A/B 用)
   };
@@ -1595,7 +1600,32 @@
     //    實測（真實存檔 27 小時、背景）：112 秒 → 4 秒。
     if (typeof gameLoop === 'function') {
       var _gl = gameLoop;
-      window.gameLoop = function () { if (catchingUp) return; return _gl.apply(this, arguments); };
+      window.gameLoop = function () { if (catchingUp) return; if (bgFastDivert()) return; return _gl.apply(this, arguments); };
+    }
+    // ⚡ v3.18.10（站主 10/25：「離線掛機結算中 明顯比補跑快太多了」）：分頁被凍結後切回來，核心補跑（js/03）是逐拍重打；
+    //    離線結算有殺速快取／取樣快轉，同樣時間快很多。落後 ≥ BG_FAST_MIN_TICKS 拍、且在一般狩獵圖 → 整筆債務改交 runCatchup。
+    //    特殊場（攀登／遺忘之島／裂痕／攻城／村莊／天梯等非 DB.maps 圖）照舊走核心補跑，行為不變。
+    function bgFastDivert() {
+      try {
+        if (catchingUp || typeof _tickDebt !== 'number' || _tickDebt < BG_FAST_MIN_TICKS * TICK_MS) return false;
+        if (!validSlot() || typeof state === 'undefined' || !state || !state.running) return false;
+        if (typeof player === 'undefined' || !player || !player.cls || player.dead) return false;
+        var map = (typeof mapState !== 'undefined' && mapState) ? mapState.current : '';
+        if (!map || map.indexOf('town_') === 0 || map === 'afk_dummy' || map === 'rift_battle') return false;
+        if (typeof DB === 'undefined' || !DB.maps || !DB.maps[map]) return false;
+        if (typeof isSiegeArea === 'function' && isSiegeArea(map)) return false;
+        if (state.prideClimb || state.oblivion || state.riftRun) return false;
+        try { if (typeof currentRoleIsMercenary === 'function' && currentRoleIsMercenary()) return false; } catch (e) {}
+        var ticks = Math.min(Math.floor(_tickDebt / TICK_MS), Math.floor(CAP_MS / TICK_MS));
+        try { if (typeof _ffCancelScheduledLoop === 'function') _ffCancelScheduledLoop(); } catch (e) {}
+        // 背景期間核心已逐拍補了一部分 → 先照原樣收尾（存檔＋摘要），再把剩下的交給快轉
+        try { if (typeof _ffAcc !== 'undefined' && _ffAcc && typeof _ffFinishCatchup === 'function') _ffFinishCatchup(); } catch (e) { try { _ffAcc = null; } catch (_) {} }
+        _tickDebt = 0;
+        var nowWall = Date.now();
+        console.info('[AFK] ⚡ 切回分頁補跑 ' + ticks + ' 拍改走快速結算');
+        runCatchup(ticks, ticks > OVERLAY_MIN_TICK, map, null, null, { closeTs: nowWall - ticks * TICK_MS, loginTs: nowWall });
+        return true;
+      } catch (e) { console.warn('[AFK] bgFastDivert 失敗,退回核心補跑:', e); return false; }
     }
     if (typeof changeMap === 'function') {
       var _cm = changeMap;
