@@ -92,6 +92,11 @@
         else if (EYE_SP[it.id]) s += EYE_SP[it.id] + e * 8;
         if (it.seteff) s += SPECIAL * 2;
         if (d.relic && it.fz > 0) { var fz = Math.min(10, Math.floor(it.fz)); s += slot === 'wpn' ? fz * (W.dmg + W.hit) : (slot === 'arm' ? fz * W.ac : fz * (W.ac + W.mr)); }   // 🔥 遺物融合（afk-fusion）
+        if (Array.isArray(it.rf)) it.rf.forEach(function (x) {   // ✨ 洗煉（afk-jingshi）
+          if (!x) return; var v = n(x.v);
+          s += x.k === 'dmg' ? v * W.dmg : x.k === 'hit' ? v * W.hit : x.k === 'ac' ? v * W.ac : x.k === 'mr' ? v * W.mr : x.k === 'hp' ? v * W.mhp : x.k === 'mp' ? v * W.mmp : (W[x.k] ? v * W[x.k] : 0);
+        });
+        if (slot === 'wpn' && it.rw && it.rw.s > 0 && it.rw.l > 0) s += ((n(it.rw.s) + n(it.rw.l)) - (n(d.dmgS) + n(d.dmgL))) / 2 * W.dmg;   // 🎲 骰武器（afk-jingshi）
         // ④ 特殊效果
         var sp = 0;
         for (var k in d) if (Object.prototype.hasOwnProperty.call(d, k) && !KNOWN[k] && d[k]) sp++;

@@ -1516,6 +1516,17 @@ function _relicWeakHitBonus(entity) {
 // 🚫 v3.2.17 petProcSpellDamage／petCollarCount／totalCollarCount 已隨舊項圈夥伴系統移除（新寵物技能傷害於 js/22 petCastSkill 自行結算）。
 
 function uid() { return Math.random().toString(36).substr(2, 9); }
+// 🎲 v3.19.0 骰武器（afk-jingshi.js）：重骰過的武器把骰面存在物品實例 rw={s,l}；戰鬥讀主武器一律走這裡（js/03/04/07 原本是 DB.items[player.eq.wpn.id]）。沒骰過＝回傳原定義，行為跟以前一樣。
+var _afkWpnCache = (typeof WeakMap === "function") ? new WeakMap() : null;
+function afkWpnDef(e) {
+    var d = e && DB.items[e.id];
+    if (!d || !e.rw || !(e.rw.s > 0) || !(e.rw.l > 0)) return d;
+    var c = _afkWpnCache && _afkWpnCache.get(e);
+    if (c && c.b === d && c.s === e.rw.s && c.l === e.rw.l) return c.o;
+    var o = Object.assign({}, d, { dmgS: e.rw.s, dmgL: e.rw.l });
+    if (_afkWpnCache) _afkWpnCache.set(e, { b: d, s: e.rw.s, l: e.rw.l, o: o });
+    return o;
+}
 function roll(n, s) { let res = 0; for(let i=0; i<n; i++) res += Math.floor(Math.random() * s) + 1; return res; }
 
 // 👇 新增這段：自動對照並產生對應素材路徑的函數

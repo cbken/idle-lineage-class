@@ -6,7 +6,7 @@ function playerAttack() {
     if (typeof _playerMorphTrigger === 'function') { try { _playerMorphTrigger('attack'); } catch (e) {} }   // 🧝 v3.0.46 玩家變身 sprite：攻擊動作（含被迴避＝有揮擊）
     // 🔮 幻術士 奇古獸攻擊：裝備奇古獸(必中魔法)或魔劍精通(任意非弓武器套用奇古獸公式) → 走奇古獸路徑，繞過物理命中/迴避
     if (player.cls === 'illusion') {
-        let _qw = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+        let _qw = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
         if (_qw && !_qw.isBow && (_qw.qigu || (player.mastery === 'i_magicsword' && !isWandWeapon(_qw)))) { qiguPlayerAttack(target, _qw); return; }   // 🔮 魔劍精通：排除魔杖（魔杖不轉奇古獸必中路徑）
     }
 
@@ -21,7 +21,7 @@ function playerAttack() {
         return;
     }
 
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     let arrowData = null;
     
     // 👇 如果拿弓，執行消耗箭矢判定
@@ -327,7 +327,7 @@ function playerAttack() {
 // ===== 🔧 龍的一擊（屠龍劍 dragonStrike）：發動一般攻擊時（不論命中）依武器機率(12%)觸發，
 // 對場上所有敵人造成必定命中 3D(力量)+30 的無屬性物理固定傷害（不受魔抗/防禦/減免影響）=====
 function dragonStrikeProc() {
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     if (!wpn || !wpn.dragonStrike) return;
     if (Math.random() * 100 >= wpn.dragonStrike) return;
     let targets = mapState.mobs.filter(m => m && m.curHp > 0 && !m._dead);
@@ -352,7 +352,7 @@ function dragonStrikeProc() {
 // ===== 🏺 v3.7.52 滅龍的一擊（真‧屠龍劍 dragonSlayStrike）：發動一般攻擊時（不論命中）依機率(15%)觸發，
 // 對場上所有敵人造成必定命中 5D(力量+敏捷+體質)+60 的無視防禦物理固定傷害；對 race「龍」的敵人 ×3 =====
 function dragonSlayStrikeProc() {
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     if (!wpn || !wpn.dragonSlayStrike) return;
     let cfg = wpn.dragonSlayStrike;
     if (Math.random() * 100 >= (cfg.rate || 15)) return;
@@ -744,7 +744,7 @@ function procFreeMagicSkill(t, skId, en, areaHit, sourceItem, illusionRecoverMp)
         // 🔧 魔導精通同屬性傷害×2 已移除(2026-07 用戶要求)
         total += Math.max(1, Math.floor(d * fragileMult(t)));
     });
-    total = Math.floor(total * enhanceWpnFinalMult(en, (sourceItem && sourceItem.type === 'wpn') ? sourceItem : (player.eq.wpn && DB.items[player.eq.wpn.id])));   // 🔧 武器強化 +11~+20：使用實際觸發武器（含副手／屬性附加魔法）
+    total = Math.floor(total * enhanceWpnFinalMult(en, (sourceItem && sourceItem.type === 'wpn') ? sourceItem : (player.eq.wpn && afkWpnDef(player.eq.wpn))));   // 🔧 武器強化 +11~+20：使用實際觸發武器（含副手／屬性附加魔法）
     if (total > 0) total = Math.max(1, Math.floor(total * equipSkillDmgMult(sk, skId)));   // 🏺 遺物 特定技能傷害倍率（觸發路徑：冰之女王魔杖觸發的冰錐等亦吃暴走兔胡蘿蔔 ×1.5）
     if (total > 0) total = illusionMagicDmg(total, true, illusionRecoverMp !== false);   // 🔮 全體免費施法只在第一個目標回MP；5件仍逐目標生效
     if (total > 0) {
@@ -862,7 +862,7 @@ function allyDollDamageReduced(ally, dmg) {
 // 單體：對 t 計算並套用一次附魔施放傷害（不負責 render；回傳是否擊殺）。aoe 由 procWeaponSpell 統一在外層迴圈處理。
 function _procWeaponSpellHit(t, sp, en, illusionRecoverMp) {
     if (!t || t.curHp <= 0) return false;
-    let _procWpn = player.eq.wpn && DB.items[player.eq.wpn.id];
+    let _procWpn = player.eq.wpn && afkWpnDef(player.eq.wpn);
     let core = magicBaseDamage(roll(sp.dice[0], sp.dice[1]), player.d, sp.flat || 0, true) * weaponMagicDamageCoef(player.d, _procWpn, t, sp.ele);
     let effMr = (t.st && t.st.mrhalf > 0) ? (t.mr / 2) : t.mr;
     let mrFactor = mrMult(effMr);
@@ -870,7 +870,7 @@ function _procWeaponSpellHit(t, sp, en, illusionRecoverMp) {
     let d = Math.floor(core * mrFactor);
     // 🔧 魔導精通同屬性傷害×2 已移除(2026-07 用戶要求)
     d = Math.max(1, Math.floor(Math.max(1, d) * fragileMult(t) * _cm));
-    d = Math.max(1, Math.floor(d * enhanceWpnFinalMult(en, player.eq.wpn && DB.items[player.eq.wpn.id])));   // 🔧 武器強化 +11~+20：最終傷害倍率（取代舊 (1+強化/20)·與一般武器一致）
+    d = Math.max(1, Math.floor(d * enhanceWpnFinalMult(en, player.eq.wpn && afkWpnDef(player.eq.wpn))));   // 🔧 武器強化 +11~+20：最終傷害倍率（取代舊 (1+強化/20)·與一般武器一致）
     d = Math.max(1, Math.floor(d * rlFuryMult()));   // 🔮 紅獅5/5＋😡狂怒5/5 最終傷害
     if (t.st && t.st.mrhalf > 0) t.st.mrhalf = 0;
     d = illusionMagicDmg(d, true, illusionRecoverMp !== false);   // 🔮 全體 spellProc 只在第一個目標回MP；5件仍逐目標生效
@@ -999,7 +999,7 @@ function _relicOnDamageHeal() {
 }
 // 🏺 遺物 法師的護身短刀：受到傷害時 rate% 免費施放「自動攻擊技能設定(sel-atk-skill)」的傷害法術（不消耗 MP·物理/魔法受擊共用·玩家專用）。
 function _relicOnHurtCast(mob) {
-    let w = player.eq && player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let w = player.eq && player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     if (!w || !w.castOnHurt) return;
     if (Math.random() * 100 >= (w.castOnHurt.rate || 0)) return;
     let el = (typeof document !== 'undefined') ? document.getElementById('sel-atk-skill') : null;
@@ -1357,7 +1357,7 @@ function _enemyPhysicalAttackInner(mob, idx, stunChance = 0, atkDmg = null, atkD
 
         // 單手劍反擊：受到敵人一般攻擊命中時觸發。一般 50% 機率；若裝備盾牌且本次觸發格檔(blocked)則必定反擊
         // 🏅 反擊精通：100% 觸發
-        if (!player.dead && mob.curHp > 0 && player.eq.wpn && (getWeaponTags(player.eq.wpn.id).includes('單手劍') || (player.buffs.sk_counter_barrier > 0 && DB.items[player.eq.wpn.id].w2h)) && !(getWeaponTags(player.eq.wpn.id).includes('武士刀') && !(player.eq.shield && !_isArmguard(player.eq.shield)))) {   // 🔧 反擊屏障：雙手武器亦可反擊；🛡️ 反擊/居合雙標籤武器「無真盾牌(空手或臂甲)」時→改走居合、不發動反擊（唯獨裝真盾牌才反擊）
+        if (!player.dead && mob.curHp > 0 && player.eq.wpn && (getWeaponTags(player.eq.wpn.id).includes('單手劍') || (player.buffs.sk_counter_barrier > 0 && afkWpnDef(player.eq.wpn).w2h)) && !(getWeaponTags(player.eq.wpn.id).includes('武士刀') && !(player.eq.shield && !_isArmguard(player.eq.shield)))) {   // 🔧 反擊屏障：雙手武器亦可反擊；🛡️ 反擊/居合雙標籤武器「無真盾牌(空手或臂甲)」時→改走居合、不發動反擊（唯獨裝真盾牌才反擊）
             if (blocked || hasMastery('k_counter') || Math.random() < 0.50) procCounter(mob);
         }
         if (!player.dead) { _combatSrc = 'mercenary'; allyReactCounter(mob, blocked); _combatSrc = null; }   // 🔧 傭兵反擊：判定主玩家受擊（玩家格檔則必定反擊）

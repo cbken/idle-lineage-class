@@ -507,6 +507,15 @@
       '<button class="fz-row" data-act="gear" style="padding:12px 10px"><b class="text-orange-300">⚔️ 裝備融合</b><span class="fz-r">搬強化值和詞綴到主裝備</span></button>');
     w.querySelector('[data-act=relic]').onclick = openPicker;
     w.querySelector('[data-act=gear]').onclick = openGearPicker;
+    // 💎 精石（afk-jingshi.js）：分解／洗煉／骰武器也從這裡進
+    try {
+      if (window.afkJingshi && window.afkJingshi.open) {
+        var body = w.querySelector('.fz-body'), b = document.createElement('button');
+        b.className = 'fz-row'; b.style.padding = '12px 10px';
+        b.innerHTML = '<b style="color:#67e8f9">💎 精石</b><span class="fz-r">分解換精石、洗煉、骰武器</span>';
+        b.onclick = window.afkJingshi.open; body.appendChild(b);
+      }
+    } catch (e) {}
   }
 
   // ===== 入口：右側按鈕區最後一排 =====

@@ -2133,7 +2133,7 @@ function spawnMob(idx) {
     if(!base) return;
     mapState.mobs[idx] = { ...base, curHp: base.hp, uid: uid(), _born: ++_mobBornSeq, _magCd: {}, justHit: false, st: newMobStatus(), _bornMs: Date.now() };   // 🏛️ _bornMs：生成時間（長老之室 BOSS 3 分鐘節流用）；_born：出生序（鎖定最早出生用）
     // 弓：場上原本沒有任何敵人時，第一個出現的敵人不論主動/被動，都強制視為被動（搭配弓攻擊3秒延遲，可先手放風箏）
-    if(!base.boss && player.eq.wpn && DB.items[player.eq.wpn.id] && DB.items[player.eq.wpn.id].isBow && !mapState.mobs.some((m, j) => m && j !== idx)) {
+    if(!base.boss && player.eq.wpn && afkWpnDef(player.eq.wpn) && afkWpnDef(player.eq.wpn).isBow && !mapState.mobs.some((m, j) => m && j !== idx)) {
         mapState.mobs[idx].beh = '被動';   // 頭目除外，維持主動
     }
     if(base.pledgeEnemy) applyPledgeEnemyScaling(mapState.mobs[idx]);   // 血盟敵人：依玩家等級縮放
@@ -2310,7 +2310,7 @@ function getPhysicalDmg(diceStr, target, wpn, arrowData, forceHeavy, forceHit, f
     // ⚔️ v3.5.97 改用「本次揮擊的武器」而非硬編主手：迅猛雙斧副手揮擊會傳入 wpnInst=player.eq.offwpn，
     //   原本 _cw 恆取主手 → 副手自己的 crush／heavyRatePct／ignHardSkin／cleave 全部失效，反而借用主手的（名實不符）。
     //   與同函式 _swingId(下方) 及 wpnEnFinalMult(wpnInst||主手) 同源，也與傭兵側 allyStrikeRoll 的 opts.wpnInst 對齊。
-    let _cw = (wpnInst && DB.items[wpnInst.id]) || (player.eq.wpn && DB.items[player.eq.wpn.id]);
+    let _cw = (wpnInst && DB.items[wpnInst.id]) || (player.eq.wpn && afkWpnDef(player.eq.wpn));
     let isCrush = !!(_cw && _cw.eff === 'crush');
     let rollHit = roll(1, 20);
     let hit = false, heavy = false, graze = false, crush = false;
@@ -2471,7 +2471,7 @@ function procLightArrow(t) {
     let effMr = (t.st && t.st.mrhalf > 0) ? (t.mr / 2) : t.mr;
     let mrFactor = hasMastery('m_resonance') ? 1 : mrMult(effMr);   // 🏅 共鳴精通：光箭無視魔抗
     let isCrit = Math.random() * 100 < player.d.magicCrit;
-    let _procWpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let _procWpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     let spCoef = weaponMagicDamageCoef(player.d, _procWpn, t, sk.ele || 'none');
     let mageDmgMult = 1.0;
     let magicCritMult = isCrit ? (1 + player.d.magicCritDmg / 100) : 1.0;
@@ -2509,7 +2509,7 @@ function procLightArrow(t) {
 // ===== 月光爆裂：對指定目標造成 1D30 + 2×強化等級 的風屬性魔法傷害（🔮 v3.4.91 改「受魔法傷害公式影響」：固定魔傷＋SP 係數＋武器特效階級＋屬性防禦＋MR·統一 proc 公式比照紅惡靈逆襲/冰矛圍籬）=====
 function procMoonburst(t) {
     if (!t || t.curHp <= 0) return;
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     let en = capWpnEn((player.eq.wpn && player.eq.wpn.en) || 0);
     let _cm = elementCounterMult('wind', t.e);   // ⚔️ 風剋水 ×1.4、被地剋 ×0.6
     let counterTxt = (_cm > 1) ? ' <span class="text-emerald-300 font-bold">(剋屬性!)</span>' : (_cm < 1 ? ' <span class="text-rose-300 font-bold">(被剋!)</span>' : '');
@@ -2533,7 +2533,7 @@ function procMoonburst(t) {
 }
 // 月光爆裂 proc 判定：裝備熾炎天使弓時 8% 觸發；主目標已死則轉移到場上隨機存活怪（與共鳴相同）
 function moonburstProc(target) {
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     if (!wpn || wpn.eff !== 'moonburst') return;
     if (Math.random() >= 0.08) return;
     let t = (target && target.curHp > 0) ? target : null;
@@ -2548,7 +2548,7 @@ function moonburstProc(target) {
 // 🏅 魔擊精通：觸發魔擊時「必定」額外觸發「擴散魔擊」——對所有敵人各自造成等同 1 次魔擊的傷害（擴散不再連鎖）
 function procMagicStrike(t, isSpread) {
     if (!t || t.curHp <= 0) return;
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     let dice = wpn ? (t.s === 'L' ? wpn.dmgL : wpn.dmgS) : 2;
     let res = getPhysicalDmg(dice, t, wpn, null, true);   // forceHeavy=true：必定命中＋重擊
     t.curHp -= res.dmg;
@@ -2612,7 +2612,7 @@ function relicAuraTick() {
 // 魔擊 proc 判定：裝備力量魔法杖時，每次攻擊(命中與否) 力量/60 機率；主目標已死則轉移到場上隨機存活怪
 function magicStrikeProc(target) {
     if (player.classicMode) return;   // 🎮 經典模式：停用魔擊
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     if (!wpn || wpn.eff !== 'magicstrike') return;
     if (Math.random() >= ((player.d.str || 0) / 60)) return;   // 觸發機率 = 裝備者力量 / 60
     let t = (target && target.curHp > 0) ? target : null;
@@ -2626,7 +2626,7 @@ function magicStrikeProc(target) {
 // ===== 連射：發動攻擊時依機率追加 1~3 箭；每箭各自接受命中判定(可未命中/重擊/爆擊)，傷害為該箭結算的 30%；每箭也各判定月光爆裂 =====
 function rapidfireProc(arrowData, forceProc, classicOk) {
     if (player.classicMode && !classicOk) return;   // 🎮 經典模式：一般連射停用；地精靈王的抗拒受擊連射為指定例外
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     if (!wpn || !wpn.rapidfire) return;
     if (!forceProc && roll(1, 100) > wpn.rapidfire) return;
     let _rfMax = hasMastery('e_rapid') ? 5 : 3;
@@ -2665,7 +2665,7 @@ function rapidfireProc(arrowData, forceProc, classicOk) {
 // 🏺 地精靈王的抗拒：裝備者受到傷害時必定額外發動一次連射；這個受擊觸發在經典模式仍有效。
 function hurtRapidfireProc() {
     if (!player || player.dead || player.hp <= 0 || !player.eq || !player.eq.wpn) return;
-    let wpn = DB.items[player.eq.wpn.id];
+    let wpn = afkWpnDef(player.eq.wpn);
     if (!wpn || !wpn.hurtRapidfire || !wpn.isBow) return;
     let arrowData = consumeArrow();
     if (!arrowData) return;
@@ -2678,7 +2678,7 @@ function _isArmguard(shRef) { return !!(shRef && DB.items[shRef.id] && DB.items[
 function procCounter(t) {
     if (player.classicMode) return;   // 🎮 經典模式：停用反擊
     if (!t || t.curHp <= 0) return;
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     let dice = wpn ? (t.s === 'L' ? wpn.dmgL : wpn.dmgS) : 2;
     let res = getPhysicalDmg(dice, t, wpn, null, false, true, false, hasMastery('k_counter'));   // forceHeavy=false, forceHit=true；🏅 反擊精通：必定爆擊
     let dmg = Math.max(1, Math.floor(res.dmg * (hasMastery('k_counter') ? 0.65 : 0.50)));   // 傷害 50%（🏅 反擊精通：+30% → 65%）
@@ -2698,7 +2698,7 @@ function procCounter(t) {
 function procIai(t) {
     if (player.classicMode) return;   // 🎮 經典模式：停用居合
     if (!t || t.curHp <= 0) return;
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     let dice = wpn ? (t.s === 'L' ? wpn.dmgL : wpn.dmgS) : 2;
     let res = getPhysicalDmg(dice, t, wpn, null, false, false, true, hasMastery('k_counter') || !!(wpn && wpn.iaiCrit));   // forceLand=true：必定命中、可重擊；🏅 反擊精通／🌅 遺物 鐮鼬的尾刃 iaiCrit：必定爆擊
     if (hasMastery('k_counter')) res.dmg = Math.max(1, Math.floor(res.dmg * 1.3));   // 🏅 反擊精通：居合傷害 +30%
@@ -2726,7 +2726,7 @@ function comboTriggerChance(owner, wpn, wpnRef) {
 // ===== 🐉 弱點曝光（weakExpose）：鎖鏈劍一般攻擊命中時依機率對目標附加堆疊（最多3層，鎖刃精通5層）；屠宰者命中時消耗並轉為額外傷害（見 castSkill 屠宰者）=====
 function weakExposeMaxLayers() { return hasMastery('k_chainblade') ? 5 : 3; }   // 🏅 鎖刃精通：上限 5 層
 function playerCanWeakExpose() {
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     if (!wpn || wpn.isBow || wpn.ranged) return false;   // 近距離武器專用
     return !!wpn.weakExpose || hasMastery('k_weakness');   // 鎖鏈劍 或 🏅 弱點精通（任意近戰武器）
 }
@@ -2749,7 +2749,7 @@ function effHpCost(sk) {
 function dragonExtraAttackProc(target) {
     let n = (player.d && player.d.equipExtraAtk) || 0;
     if (n <= 0) return;
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     if (!wpn || wpn.isBow || wpn.ranged) return;   // 近戰專用（弓另有連射）
     for (let i = 0; i < n; i++) {
         let t = (target && target.curHp > 0 && !target._dead) ? target : getTarget();
@@ -2770,7 +2770,7 @@ function dragonExtraAttackProc(target) {
 }
 function procCombo(t, fullDmg) {
     if (!t || t.curHp <= 0 || t._dead) return;
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     let dice = wpn ? (t.s === 'L' ? wpn.dmgL : wpn.dmgS) : 2;
     let res = getPhysicalDmg(dice, t, wpn, null, false, false, false, fullDmg && !!(wpn && wpn.comboForceCrit));   // 獨立命中判定（可未命中）；🏺 v3.7.52 邪惡利牙：雙擊追加攻擊必定爆擊（forceCrit·爆擊精通額外攻擊(!fullDmg)不套）
     if (!res.hit) { if (typeof vfxMiss === 'function') vfxMiss(t); logCombat(`<span class="font-bold" style="color:#c4b5fd;">【雙擊】</span>追擊 <span class="${getMobColor(t.lv)}">${t.n}</span> 未命中。`, 'miss'); return; }
@@ -2855,7 +2855,7 @@ function syncDualWield() {
 // ⚔️ 反彈精通：觸發忍耐被動時，額外對攻擊者發動一次普通攻擊（副手有雙持武器則主副手各一次）
 function reboundExtraAttack(mob) {
     if (!mob || mob.curHp <= 0 || mob._dead) return;
-    let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     if (wpn && !wpn.isBow && !wpn.ranged) {
         let dice = mob.s === 'L' ? wpn.dmgL : wpn.dmgS;
         let res = getPhysicalDmg(dice, mob, wpn, null, false, false, false);
@@ -2888,7 +2888,7 @@ function witchIceLance() {
     let effMr = (t.st && t.st.mrhalf > 0) ? (t.mr / 2) : t.mr;
     let mrFactor = mrMult(effMr);
     let isCrit = Math.random()*100 < player.d.magicCrit;
-    let _procWpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+    let _procWpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
     let spCoef = weaponMagicDamageCoef(player.d, _procWpn, t, 'water');
     let mageMult = 1.0;   // 武器特效階級已由 weaponMagicDamageCoef 統一套用。
     let critMult = isCrit ? (1 + player.d.magicCritDmg/100) : 1;

@@ -767,7 +767,7 @@
     var OFFSTATS_MAX_AGE_MS = 72 * 3600 * 1000;
     function offStatsSig() {
       var eq = [];
-      try { for (var k in player.eq) { var e = player.eq[k]; if (e && e.id) eq.push(k + ':' + e.id + ':' + (e.en || 0)); } } catch (e) {}
+      try { for (var k in player.eq) { var e = player.eq[k]; if (e && e.id) eq.push(k + ':' + e.id + ':' + (e.en || 0) + (e.rw ? ':w' + e.rw.s + '.' + e.rw.l : '') + (e.rf ? ':r' + JSON.stringify(e.rf) : '')); } } catch (e) {}
       eq.sort();
       return ['v3', mapState.current, player.lv, player.sherineWorld ? 1 : 0, player.sherineMad ? 1 : 0,
         player.classicMode ? 1 : 0, player.traditionalMode ? 1 : 0, eq.join(','),

@@ -258,7 +258,7 @@ function manualCast(skId) {
     if (player._setIllusion3 && isSupportSkill(sk)) cost = Math.max(1, Math.ceil(cost / 2));   // 🔮 幻覺3/5：輔助技能 MP 消耗 -50%
     if (cost > 0 && player.cls === 'elf' && hasMastery('e_magic') && sk.ele && sk.ele !== 'none' && sk.ele === player.elfEle) cost = Math.max(1, Math.ceil(cost * 0.5));   // 🏅 魔導精通：同屬性魔法消耗MP -50%(2026-07 30%→50%)
     if ((sk.n === '加速術' || sk.n === '強力加速術') && playerHasWindHelm()) cost = 0;   // 🏝️ 風之頭盔：加速術/強力加速術免MP（裝備或放在背包皆可）
-    if (sk.n === '寒冰氣息' && player.eq && player.eq.wpn && DB.items[player.eq.wpn.id] && DB.items[player.eq.wpn.id].freeChill) cost = 0;   // ❄️ 殘冰的死亡氣息：施放寒冰氣息不消耗 MP
+    if (sk.n === '寒冰氣息' && player.eq && player.eq.wpn && afkWpnDef(player.eq.wpn) && afkWpnDef(player.eq.wpn).freeChill) cost = 0;   // ❄️ 殘冰的死亡氣息：施放寒冰氣息不消耗 MP
     if(player.mp < cost) { logSys('MP 不足。'); return; }
     if(sk.hpCost && player.hp <= sk.hpCost) { logSys('HP 不足。'); return; }
 
@@ -448,14 +448,14 @@ function castSkillInner(skId) {
     if (sk.darkCrit) {
         let _t = getTarget(); if (!_t || _t.curHp <= 0) return false;
         if (player.cds.atkSk > 0) return false;   // ⚔️ v3.1.77 稽核中#11：比照其他攻擊技吃攻擊技冷卻（原分支位於冷卻閘之前＝唯一不受冷卻的 atk 技）
-        let _darkCritWpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+        let _darkCritWpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
         if (_darkCritWpn && _darkCritWpn.darkCritMorph === 'flywing_double') return relicFlywingDouble(_t);
         if ((player.mp || 0) <= 0) return false;   // 🩸 v3.1.77 稽核中#11：MP=0 時倍率為 0 → 燒半血只打 1 點且不觸發 castLock 可反覆自殘·必須有 MP 才施放
         if (player.hp <= player.mhp * 0.5) return false;   // HP 不足以負擔代價
         let mult = (player.mmp > 0 ? player.mp / player.mmp : 0) * 10;   // 100%MP→×10、50%→×5
         player.hp = Math.max(1, Math.floor(player.hp - player.mhp * 0.5));
         player.mp = 0;
-        let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+        let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
         let dice = wpn ? (_t.s === 'L' ? wpn.dmgL : wpn.dmgS) : 2;
         let base = getPhysicalDmg(dice, _t, wpn, null, true, false, false, true);    // forceHeavy＋forceCrit：必中必重必爆（🛡️ v2.6.69 審計#6：爆擊改由 getPhysicalDmg 內部套用一次；原外層再乘(1+爆傷%)＝自然爆擊時重複乘算變 ×4）
         let raw = (base.dmg || 1) + mobHardSkin(_t);                     // 無視硬皮：加回硬皮扣減量
@@ -475,7 +475,7 @@ function castSkillInner(skId) {
     if (player._setIllusion3 && isSupportSkill(sk)) cost = Math.max(1, Math.ceil(cost / 2));   // 🔮 幻覺3/5：輔助技能 MP 消耗 -50%
     if (cost > 0 && player.cls === 'elf' && hasMastery('e_magic') && sk.ele && sk.ele !== 'none' && sk.ele === player.elfEle) cost = Math.max(1, Math.ceil(cost * 0.5));   // 🏅 魔導精通：同屬性魔法消耗MP -50%(2026-07 30%→50%)
     if ((sk.n === '加速術' || sk.n === '強力加速術') && playerHasWindHelm()) cost = 0;   // 🏝️ 風之頭盔：加速術/強力加速術免MP（裝備或放在背包皆可）
-    if (sk.n === '寒冰氣息' && player.eq && player.eq.wpn && DB.items[player.eq.wpn.id] && DB.items[player.eq.wpn.id].freeChill) cost = 0;   // ❄️ 殘冰的死亡氣息：施放寒冰氣息不消耗 MP
+    if (sk.n === '寒冰氣息' && player.eq && player.eq.wpn && afkWpnDef(player.eq.wpn) && afkWpnDef(player.eq.wpn).freeChill) cost = 0;   // ❄️ 殘冰的死亡氣息：施放寒冰氣息不消耗 MP
     if (_echoFree) cost = 0;   // 🏅 迴響精通：連發那次不消耗 MP
     if (_royalFreeCast) cost = 0;   // 👑 魔法精通：免費額外施放選定攻擊技
     if (sk.throwAxe && hasMastery('k_dualaxe')) cost = 0;   // ⚔️ 雙斧精通：戰斧投擲不消耗 MP
@@ -590,7 +590,7 @@ function castSkillInner(skId) {
         // 🐉 屠宰者：立即額外進行 3 次近距離一般攻擊；命中消耗目標弱點曝光（每層 +10 傷害）
         if (sk.slaughter) {
             let t = getTarget(); if (!t || t.curHp <= 0) return false;
-            let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+            let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
             if (!wpn || wpn.isBow || wpn.ranged) return false;   // 需近距離武器
             player.mp -= cost; player.cds.atkSk = getAutoCastInterval(player, false, player.cds.atkSk);
             if (sk.hpCost) player.hp = Math.max(1, player.hp - effHpCost(sk));
@@ -677,7 +677,7 @@ function castSkillInner(skId) {
             if (sk.instakill && tryInstakill(t, sk.instakill, sk.n, mapState.targetIdx)) return true;   // 🦴 骷髏毀壞：先即死判定（起死回生式·vs不死非BOSS）；成功即死、不再造成傷害
             let dmg;
             if (sk.weaponDmg) {
-                let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+                let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
                 let dice = wpn ? (t.s === 'L' ? wpn.dmgL : wpn.dmgS) : 2;
                 let enB = (wpn && player.eq.wpn) ? enhanceWpnBonus(player.eq.wpn.en).dmg : 0;   // 強化值加成
                 if (sk.magScale) {
@@ -692,11 +692,11 @@ function castSkillInner(skId) {
             } else {
                 dmg = spend;   // 心靈破壞：基礎傷害＝消耗 MP，套統一魔法公式與幻術士專屬階級，無屬性、受 MR
                 let effMr = (t.st && t.st.mrhalf > 0) ? (t.mr / 2) : t.mr; if (t.st && (t.st.confuse > 0 || t.st.panic > 0)) effMr -= 10;
-                dmg = Math.max(1, Math.floor(magicBaseDamage(dmg, player.d, 0, true) * magicDamageCoef(player.d, magicAttrDefense(t, 'none'), sk.tier) * ((player.eq.wpn && (DB.items[player.eq.wpn.id] || {}).spellIgnoreMr) ? 1 : mrMult(Math.max(0, effMr)))));   // 🏺 v3.6.44 血祭儀式短刀：無視魔抗
+                dmg = Math.max(1, Math.floor(magicBaseDamage(dmg, player.d, 0, true) * magicDamageCoef(player.d, magicAttrDefense(t, 'none'), sk.tier) * ((player.eq.wpn && (afkWpnDef(player.eq.wpn) || {}).spellIgnoreMr) ? 1 : mrMult(Math.max(0, effMr)))));   // 🏺 v3.6.44 血祭儀式短刀：無視魔抗
             }
-            dmg = Math.max(1, Math.floor(dmg * fragileMult(t) * illuLvMult(player) * wpnEnFinalMult(player.eq.wpn) * elementCounterMult(sk.weaponDmg ? getWpnEle(player.eq.wpn, player.eq.wpn ? DB.items[player.eq.wpn.id] : null) : 'none', t.e)));   // 🔮 幻術士等級加成 ×(1+等級/50)；🔧 武器強化 +11~+20 最終倍率；⚔️ 屬性剋制(僅武器傷害技吃武器屬性)
-            t.curHp -= dmg; if (typeof moonShatterOnDamage === 'function') moonShatterOnDamage(player, t, dmg); t.justHit = sk.weaponDmg ? getWpnEle(player.eq.wpn, player.eq.wpn ? DB.items[player.eq.wpn.id] : null) : 'magic'; if (!sk.weaponDmg) t._spellHurt = true; mobWake(t);   // 🎬 v3.0.14 純魔法技→hurt(含頭目)
-            if (typeof reflectWallOnDamage === 'function' && t._reflectWall) { let _rwW = player.eq.wpn && DB.items[player.eq.wpn.id]; reflectWallOnDamage(t, dmg, sk.weaponDmg ? ((_rwW && (_rwW.isBow || _rwW.ranged)) ? 'ranged' : 'melee') : 'magic', null); }   // 🌑 v3.3.33 血壁空間：玩家技能傷害反射
+            dmg = Math.max(1, Math.floor(dmg * fragileMult(t) * illuLvMult(player) * wpnEnFinalMult(player.eq.wpn) * elementCounterMult(sk.weaponDmg ? getWpnEle(player.eq.wpn, player.eq.wpn ? afkWpnDef(player.eq.wpn) : null) : 'none', t.e)));   // 🔮 幻術士等級加成 ×(1+等級/50)；🔧 武器強化 +11~+20 最終倍率；⚔️ 屬性剋制(僅武器傷害技吃武器屬性)
+            t.curHp -= dmg; if (typeof moonShatterOnDamage === 'function') moonShatterOnDamage(player, t, dmg); t.justHit = sk.weaponDmg ? getWpnEle(player.eq.wpn, player.eq.wpn ? afkWpnDef(player.eq.wpn) : null) : 'magic'; if (!sk.weaponDmg) t._spellHurt = true; mobWake(t);   // 🎬 v3.0.14 純魔法技→hurt(含頭目)
+            if (typeof reflectWallOnDamage === 'function' && t._reflectWall) { let _rwW = player.eq.wpn && afkWpnDef(player.eq.wpn); reflectWallOnDamage(t, dmg, sk.weaponDmg ? ((_rwW && (_rwW.isBow || _rwW.ranged)) ? 'ranged' : 'melee') : 'magic', null); }   // 🌑 v3.3.33 血壁空間：玩家技能傷害反射
             if (player.dead) return true;   // ☠️ v3.5.87 反射反殺：死後中止收尾（不結算擊殺）
             if (sk.mpDmgPct && t.st && t.st.mrhalf > 0) t.st.mrhalf = 0;   // 🔧 心靈破壞（魔法）：受一次魔法傷害後解除魔抗減半（與其他魔法路徑一致）
             logCombat(`施放 <span style="font-weight:700;color:#7dd3fc">${sk.n}</span>，對 <span class="${getMobColor(t.lv)}">${t.n}</span> 造成 ${dmg} 點傷害。`, 'skill');
@@ -707,13 +707,13 @@ function castSkillInner(skId) {
         if(sk.dmgType === 'physical') {
             let t = getTarget();
             if(!t) return false;
-            if(sk.reqWpn === 'w2h' && (!player.eq.wpn || !DB.items[player.eq.wpn.id].w2h || DB.items[player.eq.wpn.id].isBow)) {   // 🛡️ v2.6.69 審計#4：「雙手且非弓」——維持雙手限定的同時保留舊版排除弓的設計（w2h 弓不得施放衝擊之暈）
+            if(sk.reqWpn === 'w2h' && (!player.eq.wpn || !afkWpnDef(player.eq.wpn).w2h || afkWpnDef(player.eq.wpn).isBow)) {   // 🛡️ v2.6.69 審計#4：「雙手且非弓」——維持雙手限定的同時保留舊版排除弓的設計（w2h 弓不得施放衝擊之暈）
                 if (state.ticks - _reqWpnWarnAt > 600) { _reqWpnWarnAt = state.ticks; logSys(`<span class="text-slate-400">${sk.n} 需要「雙手（非弓）武器」，目前武器不符，已暫停施放。</span>`); }   // 🛡️ 審計#15：原本靜默不施放零提示→每 60 秒提示一次
                 return false;
             }
             // 三重矢：必須裝備弓（🧹 v3.1.79 大掃除：移除 reqWpn 'nonbow' 死閘——全技能無此值·衝擊之暈實際用 'w2h'·原註解誤導）
-            if(sk.reqWpn === 'bow' && (!player.eq.wpn || !DB.items[player.eq.wpn.id].isBow)) return false;
-            let wpn = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+            if(sk.reqWpn === 'bow' && (!player.eq.wpn || !afkWpnDef(player.eq.wpn).isBow)) return false;
+            let wpn = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
             let arrowData = null;
 
             // 👇 施放三重矢等技能時也要扣箭矢（🔧 改在扣 MP/設冷卻「之前」：沒箭時不再空耗 MP 與整段攻擊冷卻）
@@ -810,7 +810,7 @@ function castSkillInner(skId) {
                 }
 
                 let effMr = (t.st && t.st.mrhalf > 0) ? (t.mr / 2) : t.mr;
-                let mrFactor = (player.eq.wpn && (DB.items[player.eq.wpn.id] || {}).spellIgnoreMr) ? 1 : mrMult(effMr);   // 🏺 v3.6.44 血祭儀式短刀：施放的傷害魔法無視目標魔法抗性
+                let mrFactor = (player.eq.wpn && (afkWpnDef(player.eq.wpn) || {}).spellIgnoreMr) ? 1 : mrMult(effMr);   // 🏺 v3.6.44 血祭儀式短刀：施放的傷害魔法無視目標魔法抗性
 
                 let dmgArray = sk.multiDmg || (sk.dmgDice ? [[sk.dmgDice[0], sk.dmgDice[1]]] : []);
                 let totalDmg = 0;
@@ -871,7 +871,7 @@ function castSkillInner(skId) {
                 if(sk.freeze) applyMobStatus(t, { kind:'freeze', pbase:sk.freeze, dur:6 }, sk.n);
                 if(sk.status) applyMobStatus(t, sk.status, sk.n, spCoef);
                 // 🏺 v3.5.27 水靈的魔力珠：原本不具冰凍效果的水屬性傷害魔法 → pct% 機率附加冰凍 dur 秒（頭目免疫冰凍照舊·經典模式停用特效）
-                { let _wfW = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+                { let _wfW = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
                   if (_wfW && _wfW.waterFreezeProc && sk.ele === 'water' && dmgArray.length > 0 && !sk.freeze && !(sk.status && sk.status.kind === 'freeze') && !player.classicMode
                       && t.curHp > 0 && !(t.boss && BOSS_IMMUNE.includes('freeze')) && Math.random() * 100 < _wfW.waterFreezeProc.pct) {
                       if (!t.st) t.st = newMobStatus();
@@ -891,7 +891,7 @@ function castSkillInner(skId) {
             });
             // 🏺 風精靈王的狂嘯：主動施展風屬性傷害魔法時，15% 免費追加一次龍捲風（武器 proc 路徑不會回到此處，避免遞迴）。
             {
-                let _ww = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+                let _ww = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
                 if (_ww && _ww.windSpellProcRate && sk.ele === 'wind' && _burstDmg > 0 && Math.random() * 100 < _ww.windSpellProcRate) {
                     let _wt = mapState.mobs.find(m => m && m.curHp > 0 && !m._dead);
                     if (_wt) { logCombat(`<span class="font-bold" style="color:#86efac;text-shadow:0 0 6px #16a34a;">【${_ww.n}】</span>狂風共振，額外觸發龍捲風！`, 'player-special'); procFreeMagicSkill(_wt, 'sk_tornado', capWpnEn((player.eq.wpn && player.eq.wpn.en) || 0), false, _ww); }
@@ -899,7 +899,7 @@ function castSkillInner(skId) {
             }
             // 🔧 神官魔杖·魔爆：施放傷害魔法時依機率(單體 智力/100、全體 智力/60)引爆本次傷害30%的無屬性傷害，均分給場上所有敵人
             {
-                let _bw = player.eq.wpn ? DB.items[player.eq.wpn.id] : null;
+                let _bw = player.eq.wpn ? afkWpnDef(player.eq.wpn) : null;
                 if (_bw && _bw.eff === 'magicburst' && _burstDmg > 0 && !player.classicMode) {   // 🎮 經典模式：停用魔爆
                     let _aoe = (sk.target === 'all') || (targets.length > 1);
                     let _msB = hasMastery('m_strike');   // 🏅 v2.6.71：改發魔擊時觸發率比照原生魔擊＝力量/60（不再吃智力/100或/60）
@@ -938,8 +938,8 @@ function castSkillInner(skId) {
     
     if(sk.type === 'buff') {
         if(sk.noRefresh && (player.buffs[skId] || 0) > 0) return false;   // 🔧 烈焰之魂等：效果未結束不可再施放（不刷新）
-        if(sk.reqWpn === 'w2h' && (!player.eq.wpn || !DB.items[player.eq.wpn.id].w2h)) return false;
-        if(sk.reqWpnMelee && (!player.eq.wpn || DB.items[player.eq.wpn.id].isBow || DB.items[player.eq.wpn.id].ranged)) return false;   // 🐉 燃燒擊砍：須裝備近距離武器
+        if(sk.reqWpn === 'w2h' && (!player.eq.wpn || !afkWpnDef(player.eq.wpn).w2h)) return false;
+        if(sk.reqWpnMelee && (!player.eq.wpn || afkWpnDef(player.eq.wpn).isBow || afkWpnDef(player.eq.wpn).ranged)) return false;   // 🐉 燃燒擊砍：須裝備近距離武器
         if(sk.reqWpnBlunt && (!player.eq.wpn || !(getWeaponTags(player.eq.wpn.id).includes('單手鈍器') || getWeaponTags(player.eq.wpn.id).includes('雙手鈍器')))) return false;   // ⚔️ 戰斧投擲：須裝備單手／雙手鈍器
         if(sk.reqShield && !player.eq.shield && !(player.eq.wpn && getWeaponTags(player.eq.wpn.id).includes('武士刀'))) return false;   // 武士刀：免盾亦可施展
         // 🧙 v3.2.21 玩家召喚類 v2：sk_summon／sk_zombie（造屍術）／sk_elf_summon(2)（屬性精靈）分流到 js/23（多實體·可被攻擊·浮動框）；迷魅與傭兵維持舊 setupSummon 管線
@@ -1105,7 +1105,7 @@ function getAutoCastInterval(actor, support, current) {
 
 // 🐍 艾庫艾托的枯竭魔杖：自動施放的傷害技能 消耗MP×2、傷害×1.5（僅 auto 施放路徑；手動施放不受影響）
 let _autoCastNow = false;
-function _equipWpnField(f) { let w = (player.eq && player.eq.wpn) ? DB.items[player.eq.wpn.id] : null; return (w && w[f]) || 0; }
+function _equipWpnField(f) { let w = (player.eq && player.eq.wpn) ? afkWpnDef(player.eq.wpn) : null; return (w && w[f]) || 0; }
 // 自動施放攻擊／治癒／轉換法術：每個 tick 呼叫一次，各欄位獨立冷卻但共用 castIntervalTicks 速度公式
 function autoCastSpells() {
     if(!state.running || player.dead) return;
@@ -1180,7 +1180,7 @@ if (typeof castSkillInner === 'function' && !castSkillInner._bloodWrapped) {
         try {
             let _spent = _mpB - player.mp;
             if (r && _spent > 0 && player.hp > 200 && !player.dead) {
-                let _w = player.eq.wpn && DB.items[player.eq.wpn.id];
+                let _w = player.eq.wpn && afkWpnDef(player.eq.wpn);
                 if (_w && _w.autocastBacklash) { player.hp = Math.max(1, player.hp - _spent); logCombat(`<span class="font-bold text-red-400">【血祭】</span>短刀吸取了你的血肉，受到 ${_spent} 點固定傷害。`, 'enemy'); }
             }
         } catch (e) {}
@@ -1198,7 +1198,7 @@ if (typeof castSkillInner === 'function' && !castSkillInner._spellbladeWrapped) 
         try {
             let _spent2 = _mpB2 - player.mp;
             if (r && _spent2 > 0 && !player.dead) {
-                let _w2 = player.eq.wpn && DB.items[player.eq.wpn.id];
+                let _w2 = player.eq.wpn && afkWpnDef(player.eq.wpn);
                 let _sk2 = DB.skills[skId];
                 if (_w2 && _w2.spellbladeBuff && _sk2 && _sk2.type === 'atk') {
                     let _sbEle2 = spellbladeSkillElement(_sk2.ele) || null;
